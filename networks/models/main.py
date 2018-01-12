@@ -1,4 +1,5 @@
 import tensorflow as tf
+import horovod.tensorflow as hvd
 import train
 import numpy as np
 import pprint
@@ -24,6 +25,8 @@ flags.DEFINE_string("checkpoint_dir", "checkpoints", "Directory name to save the
 flags.DEFINE_string("experiment", "run_0", "Tensorboard run directory name [run_0]")
 flags.DEFINE_boolean("save_every_step", False, "Save a checkpoint after every step [False]")
 flags.DEFINE_boolean("verbose", True, "print loss on every step [False]")
+flags.DEFINE_integer("num_inter_threads", 1, "number of concurrent tasks [1]")
+flags.DEFINE_integer("num_intra_threads", 4, "number of threads per task [4]")
 config = flags.FLAGS
 
 def main(_):

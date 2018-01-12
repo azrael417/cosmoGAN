@@ -5,7 +5,7 @@ class dcgan(object):
     def __init__(self, output_size=64, batch_size=64, 
                  nd_layers=4, ng_layers=4, df_dim=128, gf_dim=128, 
                  c_dim=1, z_dim=100, flip_labels=0.01, data_format="NHWC",
-                 gen_prior=tf.random_normal, transpose_b=False):
+                 gen_prior=tf.random_normal, transpose_b=False, distributed=False):
 
         self.output_size = output_size
         self.batch_size = batch_size
@@ -20,6 +20,7 @@ class dcgan(object):
         self.gen_prior = gen_prior
         self.transpose_b = transpose_b # transpose weight matrix in linear layers for (possible) better performance when running on HSW/KNL
         self.stride = 2 # this is fixed for this architecture
+        self.distributed = distributed
 
         self._check_architecture_consistency()
 
@@ -74,7 +75,7 @@ class dcgan(object):
         with tf.variable_scope("counters") as counters_scope:
             self.epoch = tf.Variable(-1, name='epoch', trainable=False)
             self.increment_epoch = tf.assign(self.epoch, self.epoch+1)
-            self.global_step = tf.Variable(0, name='global_step', trainable=False)
+            self.global_step = tf.train.get_or_create_global_step() #tf.Variable(0, name='global_step', trainable=False)
 
         self.saver = tf.train.Saver(max_to_keep=8000)
 
@@ -107,6 +108,11 @@ class dcgan(object):
 
         g_optim = tf.train.AdamOptimizer(learning_rate, beta1=beta1) \
                                          .minimize(self.g_loss, var_list=self.g_vars)
+        
+        #horovod additions if distributed
+        if self.distributed:
+            d_optim = hvd.DistributedOptimizer(d_optim)
+            g_optim = hvd.DistributedOptimizer(g_optim)
 
         return tf.group(d_optim, g_optim, name="all_optims")
 
