@@ -15,6 +15,7 @@ def train_dcgan(data, config):
 
     with training_graph.as_default():
 
+        print("Creating GAN")
         gan = dcgan.dcgan(output_size=config.output_size,
                           batch_size=config.batch_size,
                           nd_layers=config.nd_layers,
@@ -53,7 +54,11 @@ def train_dcgan(data, config):
         #variables initializer
         init_op = tf.global_variables_initializer()
         
-        with tf.train.MonitoredTrainingSession(config=sess_config, checkpoint_dir=checkpoint_dir, save_checkpoint_secs=300, hooks=hooks) as sess:
+        print("Starting Session")
+        with tf.train.MonitoredTrainingSession(config=sess_config, 
+                                               checkpoint_dir=checkpoint_dir if hvd.rank()==0 else None, 
+                                               save_checkpoint_secs=300, 
+                                               hooks=hooks) as sess:
             
             #init global variables
             sess.run(init_op,feed_dict={gan.images: data[0:config.batch_size,:,:,:]})
@@ -69,25 +74,23 @@ def train_dcgan(data, config):
                 #permute data
                 perm = np.random.permutation(data.shape[0])
 
-                #do the epoch
+                #do the epoch                
                 for idx in range(0, num_batches):
                     batch_images = data[perm[idx*config.batch_size:(idx+1)*config.batch_size]]
 
                     _, g_sum, d_sum = sess.run([update_op, gan.g_summary, gan.d_summary], 
                                                feed_dict={gan.images: batch_images})
 
-                    global_step = gan.global_step.eval()
-                    
+                    global_step = sess.run(gan.global_step)
+                                        
                     #verbose printing
                     if config.verbose:
-                        errD_fake = gan.d_loss_fake.eval()
-                        errD_real = gan.d_loss_real.eval({gan.images: batch_images})
-                        errG = gan.g_loss.eval()
+                        errD_fake, errD_real, errG = sess.run([gan.d_loss_fake,gan.d_loss_real,gan.g_loss], feed_dict={gan.images: batch_images})
 
                         print("Epoch: [%2d] Step: [%4d/%4d] time: %4.4f, d_loss: %.8f, g_loss: %.8f" \
                                 % (epoch, idx, num_batches, time.time() - start_time, errD_fake+errD_real, errG))
 
-                    elif global_step%2 == 0:
+                    elif global_step%100 == 0:
                         print("Epoch: [%2d] Step: [%4d/%4d] time: %4.4f"%(epoch, idx, num_batches, time.time() - start_time))
 
                 # save a checkpoint every epoch

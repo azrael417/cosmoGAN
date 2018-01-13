@@ -15,12 +15,13 @@ save_every_step = 'False'
 data_format = 'NCHW'
 transpose_matmul_b = False
 verbose = 'True'
+nodeid = os.environ['SLURM_PROCID']
 
 experiment = 'cosmo_primary_256_200k_batchSize%i_flipLabel%0.3f_'\
              'nd%i_ng%i_gfdim%i_dfdim%i_zdim%i'%(batch_size, flip_labels, nd_layers,\
                                                  ng_layers, gf_dim, df_dim, z_dim)
 
-command = 'python -m models.main --dataset cosmo --datafile %s '\
+command = 'python -u -m models.main --dataset cosmo --datafile %s '\
           '--output_size %i --flip_labels %f --experiment %s '\
           '--epoch %i --batch_size %i --z_dim %i '\
           '--nd_layers %i --ng_layers %i --gf_dim %i --df_dim %i --save_every_step %s '\
@@ -33,5 +34,5 @@ if not os.path.isdir('output'):
     os.mkdir('output')
 
 print command.split()
-f_out = open('output/'+experiment+'.log', 'w')
+f_out = open('output/'+experiment+'_rank'+str(nodeid)+'.log', 'w')
 subprocess.call(command.split(), stdout=f_out)

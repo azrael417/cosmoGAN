@@ -3,6 +3,7 @@ import horovod.tensorflow as hvd
 import train
 import numpy as np
 import pprint
+import sys
 
 flags = tf.app.flags
 flags.DEFINE_string("dataset", "cosmo", "The name of dataset [cosmo]")
@@ -30,7 +31,7 @@ flags.DEFINE_integer("num_intra_threads", 4, "number of threads per task [4]")
 config = flags.FLAGS
 
 def main(_):
-
+    print("Initializing cosmoGAN")
     pprint.PrettyPrinter().pprint(config.__flags)
     train.train_dcgan(get_data(), config)
 
