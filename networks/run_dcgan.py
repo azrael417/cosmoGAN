@@ -16,6 +16,7 @@ data_format = 'NCHW'
 transpose_matmul_b = False
 verbose = 'True'
 nodeid = os.environ['SLURM_PROCID']
+numnodes = os.environ['SLURM_NNODES']
 
 experiment = 'cosmo_primary_256_200k_batchSize%i_flipLabel%0.3f_'\
              'nd%i_ng%i_gfdim%i_dfdim%i_zdim%i'%(batch_size, flip_labels, nd_layers,\
@@ -34,5 +35,5 @@ if not os.path.isdir('output'):
     os.mkdir('output')
 
 print command.split()
-f_out = open('output/'+experiment+'_rank'+str(nodeid)+'.log', 'w')
+f_out = open('output/'+experiment+'_nodes'+str(numnodes)+'_rank'+str(nodeid)+'.log', 'w')
 subprocess.call(command.split(), stdout=f_out)
