@@ -104,17 +104,19 @@ class dcgan(object):
 
     def optimizer(self, learning_rate, beta1):
 
-        d_optim = tf.train.AdamOptimizer(learning_rate, beta1=beta1) \
-                                         .minimize(self.d_loss, var_list=self.d_vars, global_step=self.global_step)
-
-        g_optim = tf.train.AdamOptimizer(learning_rate, beta1=beta1) \
-                                         .minimize(self.g_loss, var_list=self.g_vars)
+        #set up optimizers
+        d_optim = tf.train.AdamOptimizer(learning_rate, beta1=beta1)
+        g_optim = tf.train.AdamOptimizer(learning_rate, beta1=beta1)
         
         #horovod additions if distributed
         if self.distributed:
             d_optim = hvd.DistributedOptimizer(d_optim)
             g_optim = hvd.DistributedOptimizer(g_optim)
-
+        
+        #now tell the optimizers what to do
+        d_optim = d_optim.minimize(self.d_loss, var_list=self.d_vars, global_step=self.global_step)
+        g_optim = g_optim.minimize(self.g_loss, var_list=self.g_vars)
+            
         return tf.group(d_optim, g_optim, name="all_optims")
 
                                                    
