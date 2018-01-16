@@ -1,4 +1,5 @@
 import tensorflow as tf
+import horovod.tensorflow as hvd
 from .ops import linear, conv2d, conv2d_transpose, lrelu
 
 class dcgan(object):
