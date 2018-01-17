@@ -122,7 +122,7 @@ class dcgan(object):
             d_train_step = d_optim.apply_gradients(d_gs_and_vs, global_step=self.global_step)
             #generator
             g_grads_and_vars = g_optim.compute_gradients(self.g_loss)
-            g_grads     = mc.gradients([gv[0] for gv in g_grads_and_vars], 0)
+            g_grads     = mc.gradients([gv[0] for gv in g_grads_and_vars], 1)
             g_gs_and_vs = [(g,v) for (_,v), g in zip(g_grads_and_vars, g_grads)]
             g_train_step = g_optim.apply_gradients(g_gs_and_vs, global_step=self.global_step)
             

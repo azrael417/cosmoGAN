@@ -80,7 +80,8 @@ def train_dcgan(data, config):
         init_op = tf.global_variables_initializer()
         
         #config the stopping criterion
-        mc.config_team(0, 0, 100, config.epoch*num_batches, 2, 200)
+        mc.config_team(0, 0, int(config.epoch*num_batches*0.2), config.epoch*num_batches, 2, 200)
+        mc.config_team(1, 0, int(config.epoch*num_batches*0.2), config.epoch*num_batches, 2, 200)
         
         print("Starting Session")
         with tf.train.MonitoredTrainingSession(config=sess_config, 

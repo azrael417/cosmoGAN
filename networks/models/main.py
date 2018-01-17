@@ -37,7 +37,9 @@ def main(_):
     print("Initializing cosmoGAN")
     
     #init MPI
-    mc.init(1, 1, 20*1024*1024, "tensorflow")
+    nthreads_per_team=1
+    nteams=2
+    mc.init(nthreads_per_team, nteams, 20*1024*1024, "tensorflow")
     
     #call training
     pprint.PrettyPrinter().pprint(config.__flags)
