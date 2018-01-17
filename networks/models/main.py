@@ -38,6 +38,14 @@ def main(_):
 def get_data():
     data = np.load(config.datafile, mmap_mode='r')
 
+    #make sure that each node only works on its chunk of the data
+    num_samples = data.shape[0]
+    num_ranks = hvd.size()
+    num_samples_per_rank = num_samples // num_ranks
+    start = num_samples_per_rank*hvd.rank()
+    end = np.min([num_samples_per_rank*(hvd.rank()+1),num_samples])
+    data = data[start:end,:,:]
+
     if config.data_format == 'NHWC':
         data = np.expand_dims(data, axis=-1)
     else: # 'NCHW'

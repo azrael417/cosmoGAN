@@ -44,7 +44,7 @@ def train_dcgan(data, config):
         hooks = [hvd.BroadcastGlobalVariablesHook(0)]
         
         #stop hook
-        num_batches = data.shape[0] // (config.batch_size*hvd.size())
+        num_batches = data.shape[0] // config.batch_size
         hooks.append(tf.train.StopAtStepHook(last_step=config.epoch*num_batches))
         
         #summary hook
