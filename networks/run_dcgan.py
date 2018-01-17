@@ -19,8 +19,8 @@ nodeid = os.environ['SLURM_PROCID']
 numnodes = os.environ['SLURM_NNODES']
 
 experiment = 'cosmo_primary_256_200k_batchSize%i_flipLabel%0.3f_'\
-             'nd%i_ng%i_gfdim%i_dfdim%i_zdim%i'%(batch_size, flip_labels, nd_layers,\
-                                                 ng_layers, gf_dim, df_dim, z_dim)
+             'nd%i_ng%i_gfdim%i_dfdim%i_zdim%i_nodes%i_rank%i'%(batch_size, flip_labels, nd_layers,\
+                                                 ng_layers, gf_dim, df_dim, z_dim, numnodes, nodeid)
 
 command = 'python -u -m models.main --dataset cosmo --datafile %s '\
           '--output_size %i --flip_labels %f --experiment %s '\
@@ -35,5 +35,5 @@ if not os.path.isdir('output'):
     os.mkdir('output')
 
 print command.split()
-f_out = open('output/'+experiment+'_nodes'+str(numnodes)+'_rank'+str(nodeid)+'.log', 'w')
+f_out = open('output/'+experiment+'.log', 'w')
 subprocess.call(command.split(), stdout=f_out)

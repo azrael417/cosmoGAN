@@ -22,4 +22,3 @@ export MLSL_NUM_SERVERS=0
 
 #run training
 srun -N ${SLURM_NNODES} -n ${SLURM_NNODES} -c 272 -u python -u ../networks/run_dcgan.py
-#srun -N 1 -n 1 -c 272 -u python ../networks/run_dcgan.py
