@@ -91,4 +91,4 @@ def train_dcgan(data, config):
                         print("Epoch: [%2d] Step: [%4d/%4d] time: %4.4f"%(epoch, idx, num_batches, time.time() - start_time))
 
                 # save a checkpoint every epoch
-                sess.run(gan.increment_epoch)
+                epoch = sess.run(gan.increment_epoch)

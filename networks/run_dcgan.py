@@ -3,7 +3,7 @@ import subprocess
 
 datafile = '/global/cscratch1/sd/tkurth/gb2018/cosmoGAN/small_set/cosmo_primary_256_200k_train.npy'
 output_size = 256
-epoch = 1
+epoch = 1000
 flip_labels = 0.01
 batch_size = 64
 z_dim = 64
