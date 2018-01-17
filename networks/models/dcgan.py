@@ -1,4 +1,8 @@
 import tensorflow as tf
+#import cray plugin
+import ml_comm as mc
+import math
+
 from .ops import linear, conv2d, conv2d_transpose, lrelu
 
 class dcgan(object):
@@ -103,19 +107,38 @@ class dcgan(object):
 
     def optimizer(self, learning_rate, beta1):
 
-        d_optim = tf.train.AdamOptimizer(learning_rate, beta1=beta1) \
-                                         .minimize(self.d_loss, var_list=self.d_vars, global_step=self.global_step)
-
-        g_optim = tf.train.AdamOptimizer(learning_rate, beta1=beta1) \
-                                         .minimize(self.g_loss, var_list=self.g_vars)
+        d_optim = tf.train.AdamOptimizer(learning_rate, beta1=beta1)
+        g_optim = tf.train.AdamOptimizer(learning_rate, beta1=beta1)
         
-        #horovod additions if distributed
+        #craype-ml additions if distributed
+        opt = None
         if self.distributed:
             
-            d_optim = hvd.DistributedOptimizer(d_optim)
-            g_optim = hvd.DistributedOptimizer(g_optim)
+            # we need to split out the minimize call below so we can modify gradients
+            #discriminator
+            d_grads_and_vars = d_optim.compute_gradients(self.d_loss)
+            d_grads     = mc.gradients([gv[0] for gv in d_grads_and_vars], 0)
+            d_gs_and_vs = [(g,v) for (_,v), g in zip(d_grads_and_vars, d_grads)]
+            d_train_step = d_optim.apply_gradients(d_gs_and_vs, global_step=self.global_step)
+            #generator
+            g_grads_and_vars = g_optim.compute_gradients(self.g_loss)
+            g_grads     = mc.gradients([gv[0] for gv in g_grads_and_vars], 0)
+            g_gs_and_vs = [(g,v) for (_,v), g in zip(g_grads_and_vars, g_grads)]
+            g_train_step = g_optim.apply_gradients(g_gs_and_vs, global_step=self.global_step)
+            
+            #opt object
+            opt = tf.group(d_train_step, g_train_step, name="all_optims")
 
-        return tf.group(d_optim, g_optim, name="all_optims")
+        else:
+            #discriminator
+            d_optim = d_optim.minimize(self.d_loss, var_list=self.d_vars, global_step=self.global_step)
+            #generator
+            g_optim = g_optim.minimize(self.g_loss, var_list=self.g_vars)
+            
+            #opt object
+            opt = tf.group(d_optim, g_optim, name="all_optims")
+
+        return opt
 
                                                    
     def generator(self, z, is_training):

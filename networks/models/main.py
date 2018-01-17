@@ -1,5 +1,8 @@
 import tensorflow as tf
-import horovod.tensorflow as hvd
+#import cray plugin
+import ml_comm as mc
+import math
+
 import train
 import numpy as np
 import pprint
@@ -32,11 +35,24 @@ config = flags.FLAGS
 
 def main(_):
     print("Initializing cosmoGAN")
+    
+    #init MPI
+    mc.init(1, 1, 20*1024*1024, "tensorflow")
+    
+    #call training
     pprint.PrettyPrinter().pprint(config.__flags)
     train.train_dcgan(get_data(), config)
 
 def get_data():
     data = np.load(config.datafile, mmap_mode='r')
+    
+    #make sure that each node only works on its chunk of the data
+    num_samples = data.shape[0]
+    num_ranks = mc.get_nranks()
+    num_samples_per_rank = num_samples // num_ranks
+    start = num_samples_per_rank*mc.get_rank()
+    end = np.min([num_samples_per_rank*(mc.get_rank()+1),num_samples])
+    data = data[start:end,:,:]
 
     if config.data_format == 'NHWC':
         data = np.expand_dims(data, axis=-1)

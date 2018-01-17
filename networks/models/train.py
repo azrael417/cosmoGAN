@@ -2,14 +2,39 @@ import os
 import time
 import numpy as np
 import tensorflow as tf
-import horovod.tensorflow as hvd
+#import cray plugin
+import ml_comm as mc
+import math
+
 import dcgan
 from utils import save_checkpoint, load_checkpoint
 
+# CRAY ADDED
+# since this script uses a monitored session, we need to create a hook to initialize
+# variables after the session is generated
+class BcastTensors(tf.train.SessionRunHook):
+
+    def __init__(self):
+        self.bcast = None
+
+    def begin(self):
+        if not self.bcast:
+            new_vars   = mc.broadcast(tf.trainable_variables(),0)
+            self.bcast = tf.group(*[tf.assign(v,new_vars[k]) for k,v in enumerate(tf.trainable_variables())])
+
+    def after_create_session(self, session, coord, validate_init=True):
+        session.run(self.bcast)
+
+        if validate_init:
+            py_all_vars = [session.run(v) for v in tf.trainable_variables()]
+            if (mc.check_buffers_match(py_all_vars,1) != 0):
+                print("ERROR: not all processes have the same initial model!")
+            else:
+                print("Initial model is consistent on all ranks")
+
+# END CRAY ADDED
+
 def train_dcgan(data, config):
-    
-    #first of all, init horovod:
-    hvd.init()
     
     training_graph = tf.Graph()
 
@@ -40,23 +65,26 @@ def train_dcgan(data, config):
                                    allow_soft_placement=True)
 
         #horovod additions
-        sess_config.gpu_options.visible_device_list = str(hvd.local_rank())
-        hooks = [hvd.BroadcastGlobalVariablesHook(0)]
+        sess_config.gpu_options.visible_device_list = str(mc.get_rank())
+        hooks = [BcastTensors()]
         
         #stop hook
-        num_batches = data.shape[0] // (config.batch_size*hvd.size())
-        hooks.append(tf.train.StopAtStepHook(last_step=config.epoch*num_batches))
+        num_batches = data.shape[0] // config.batch_size #already per config
+        hooks.append(tf.train.StopAtStepHook(last_step=config.epoch*num_batches*mc.get_nranks()))
         
         #summary hook
-        #hooks.append(tf.train.SummarySaverHook(save_steps=num_batches,output_dir='./logs/'+config.experiment+'/train'+str(hvd.rank()),summary_op=gan.g_summary))
-        #hooks.append(tf.train.SummarySaverHook(save_steps=num_batches,output_dir='./logs/'+config.experiment+'/train'+str(hvd.rank()),summary_op=gan.d_summary))
+        #hooks.append(tf.train.SummarySaverHook(save_steps=num_batches,output_dir='./logs/'+config.experiment+'/train'+str(mc.get_rank()),summary_op=gan.g_summary))
+        #hooks.append(tf.train.SummarySaverHook(save_steps=num_batches,output_dir='./logs/'+config.experiment+'/train'+str(mc.get_rank()),summary_op=gan.d_summary))
         
         #variables initializer
         init_op = tf.global_variables_initializer()
         
+        #config the stopping criterion
+        mc.config_team(0, 0, 100, config.epoch*num_batches*mc.get_nranks(), 2, 200)
+        
         print("Starting Session")
         with tf.train.MonitoredTrainingSession(config=sess_config, 
-                                               checkpoint_dir=checkpoint_dir if hvd.rank()==0 else None, 
+                                               checkpoint_dir=checkpoint_dir if mc.get_rank()==0 else None, 
                                                save_checkpoint_secs=300, 
                                                hooks=hooks) as sess:
             
@@ -95,3 +123,6 @@ def train_dcgan(data, config):
 
                 # save a checkpoint every epoch
                 sess.run(gan.increment_epoch)
+                
+            #quit gracefully
+            mc.finalize()
