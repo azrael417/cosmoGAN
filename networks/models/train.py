@@ -70,7 +70,7 @@ def train_dcgan(data, config):
         
         #stop hook
         num_batches = data.shape[0] // config.batch_size #already per config
-        hooks.append(tf.train.StopAtStepHook(last_step=config.epoch*num_batches*mc.get_nranks()))
+        hooks.append(tf.train.StopAtStepHook(last_step=config.epoch*num_batches))
         
         #summary hook
         #hooks.append(tf.train.SummarySaverHook(save_steps=num_batches,output_dir='./logs/'+config.experiment+'/train'+str(mc.get_rank()),summary_op=gan.g_summary))
@@ -80,7 +80,7 @@ def train_dcgan(data, config):
         init_op = tf.global_variables_initializer()
         
         #config the stopping criterion
-        mc.config_team(0, 0, 100, config.epoch*num_batches*mc.get_nranks(), 2, 200)
+        mc.config_team(0, 0, 100, config.epoch*num_batches, 2, 200)
         
         print("Starting Session")
         with tf.train.MonitoredTrainingSession(config=sess_config, 
