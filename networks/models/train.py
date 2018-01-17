@@ -8,9 +8,6 @@ from utils import save_checkpoint, load_checkpoint
 
 def train_dcgan(data, config):
     
-    #first of all, init horovod:
-    hvd.init()
-    
     training_graph = tf.Graph()
 
     with training_graph.as_default():

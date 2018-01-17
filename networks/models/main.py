@@ -31,6 +31,10 @@ flags.DEFINE_integer("num_intra_threads", 4, "number of threads per task [4]")
 config = flags.FLAGS
 
 def main(_):
+    #init horovod
+    hvd.init()
+    
+    #print and start training
     print("Initializing cosmoGAN")
     pprint.PrettyPrinter().pprint(config.__flags)
     train.train_dcgan(get_data(), config)
