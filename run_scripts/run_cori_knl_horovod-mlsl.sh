@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH -q regular
+#SBATCH -q premium
 #SBATCH -A nstaff
 #SBATCH -C knl
 #SBATCH -t 1:00:00
