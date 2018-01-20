@@ -20,6 +20,10 @@ export PYTHONPATH=$(pwd)/../networks:${modulebase}/lib/python2.7/site-packages:$
 #important, otherwise crash because MPI_Comm_Spawn is not available
 export MLSL_NUM_SERVERS=0
 
+#better binding
+bindstring="numactl -C 1-67,69-135,137-203,205-271"
+#bindstring=""
+
 #run training
-srun -N ${SLURM_NNODES} -n ${SLURM_NNODES} -c 272 -u python -u ../networks/run_dcgan.py
+srun -N ${SLURM_NNODES} -n ${SLURM_NNODES} -c 272 -u ${bindstring} python -u ../networks/run_dcgan.py
 #srun -N 1 -n 1 -c 272 -u python ../networks/run_dcgan.py
