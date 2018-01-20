@@ -1,8 +1,8 @@
 import os
 import subprocess
 
-datafile = '/global/cscratch1/sd/tkurth/gb2018/cosmoGAN/small_set/cosmo_primary_256_200k_train.npy'
-#datafile = '/global/cscratch1/sd/tkurth/gb2018/cosmoGAN/tiny_set/cosmo_primary_256_50k_train.npy'
+#datafile = '/global/cscratch1/sd/tkurth/gb2018/cosmoGAN/small_set/cosmo_primary_256_200k_train.npy'
+datafile = '/global/cscratch1/sd/tkurth/gb2018/cosmoGAN/tiny_set/cosmo_primary_256_50k_train.npy'
 output_size = 256
 epoch = 1000
 flip_labels = 0.01
@@ -19,7 +19,7 @@ verbose = 'True'
 nodeid = int(os.environ['SLURM_PROCID'])
 numnodes = int(os.environ['SLURM_NNODES'])
 
-experiment = 'cosmo_primary_256_200k_batchSize%i_flipLabel%0.3f_'\
+experiment = 'cosmo_primary_256_50k_batchSize%i_flipLabel%0.3f_'\
              'nd%i_ng%i_gfdim%i_dfdim%i_zdim%i_nodes%i_rank%i'%(batch_size, flip_labels, nd_layers,\
                                                  ng_layers, gf_dim, df_dim, z_dim, numnodes, nodeid)
 
