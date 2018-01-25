@@ -25,7 +25,7 @@ transpose_matmul_b = False
 verbose = 'True'
 nodeid = int(os.environ['SLURM_PROCID'])
 numnodes = int(os.environ['SLURM_NNODES'])
-group = args.group
+group = args.group[0]
 
 experiment = 'cosmo_primary_256_50k_batchSize%i_flipLabel%0.3f_'\
              'nd%i_ng%i_gfdim%i_dfdim%i_zdim%i_likwid%s_nodes%i_rank%i'%(batch_size, flip_labels, nd_layers,\

@@ -8,9 +8,10 @@
 
 #perfcounter:
 #group=MEM
-group=DATA
+#group=DATA
 #group=HBM_CACHE
 #group=FLOPS_SP
+group=FLOPS_DP
 
 #set up python stuff
 module load python

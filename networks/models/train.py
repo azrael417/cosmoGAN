@@ -23,7 +23,8 @@ def train_dcgan(data, config):
                           z_dim=config.z_dim,
                           flip_labels=config.flip_labels,
                           data_format=config.data_format,
-                          transpose_b=config.transpose_matmul_b)
+                          transpose_b=config.transpose_matmul_b,
+                          distributed=True)
 
         gan.training_graph()
         update_op = gan.optimizer(config.learning_rate, config.beta1)

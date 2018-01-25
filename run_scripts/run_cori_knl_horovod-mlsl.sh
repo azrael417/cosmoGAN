@@ -1,8 +1,8 @@
 #!/bin/bash
-#SBATCH -q premium
+#SBATCH -q regular
 #SBATCH -A nstaff
 #SBATCH -C knl
-#SBATCH -t 1:00:00
+#SBATCH -t 4:00:00
 #SBATCH -J cosmogan_horovod-mlsl
 
 #set up python stuff
