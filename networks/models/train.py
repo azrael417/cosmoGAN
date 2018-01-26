@@ -23,8 +23,8 @@ def train_dcgan(data, config):
                           z_dim=config.z_dim,
                           flip_labels=config.flip_labels,
                           data_format=config.data_format,
-                          transpose_b=config.transpose_matmul_b,
-                          distributed=True)
+                          transpose_b=config.transpose_matmul_b)#,
+                          #distributed=True)
 
         gan.training_graph()
         update_op = gan.optimizer(config.learning_rate, config.beta1)
@@ -49,13 +49,18 @@ def train_dcgan(data, config):
         #hooks.append(tf.train.SummarySaverHook(save_steps=num_batches,output_dir='./logs/'+config.experiment+'/train'+str(hvd.rank()),summary_op=gan.g_summary))
         #hooks.append(tf.train.SummarySaverHook(save_steps=num_batches,output_dir='./logs/'+config.experiment+'/train'+str(hvd.rank()),summary_op=gan.d_summary))
         
+        #checkpoint hook for fine grained checkpointing
+        #save after every 10 epochs but only on node 0:
+        if hvd.rank() == 0:
+          checkpoint_save_freq = num_batches * 10
+          checkpoint_saver = tf.train.Saver(max_to_keep = 1000)
+          hooks.append(tf.train.CheckpointSaverHook(checkpoint_dir=checkpoint_dir, save_steps=checkpoint_save_freq, saver=checkpoint_saver))
+        
         #variables initializer
         init_op = tf.global_variables_initializer()
         
         print("Starting Session")
         with tf.train.MonitoredTrainingSession(config=sess_config, 
-                                               checkpoint_dir=checkpoint_dir if hvd.rank()==0 else None, 
-                                               save_checkpoint_secs=300, 
                                                hooks=hooks) as sess:
             
             #init global variables

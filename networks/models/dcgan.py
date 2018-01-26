@@ -110,6 +110,7 @@ class dcgan(object):
         
         #horovod additions if distributed
         if self.distributed:
+            print("Enabling Distributed Updating!")
             d_optim = hvd.DistributedOptimizer(d_optim)
             g_optim = hvd.DistributedOptimizer(g_optim)
         
