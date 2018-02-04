@@ -15,6 +15,9 @@ module load tensorflow/intel-horovod-mpi-head
 #modulebase=$(dirname $(module show tensorflow/intel-head 2>&1 | grep PATH |awk '{print $3}'))
 export PYTHONPATH=$(pwd)/../networks  #:${modulebase}/lib/python2.7/site-packages:${PYTHONPATH}
 
+#clean cp
+rm -r checkpoints/*
+
 #run training
 srun -N ${SLURM_NNODES} -n ${SLURM_NNODES} -c 272 -u python -u ../networks/run_cramer_dcgan.py
 #srun -N 1 -n 1 -c 272 -u python ../networks/run_cramer_dcgan.py

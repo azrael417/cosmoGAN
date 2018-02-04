@@ -57,8 +57,8 @@ class cramer_dcgan(object):
                 x_hat = xg + epsilon * (x - xg)
                 f_x_hat = self.critic(x_hat, xgp)
                 f_x_hat_gradient = tf.gradients(f_x_hat, x_hat)[0]
-                gradient_penalty = tf.reduce_mean( tf.square(tf.norm(f_x_hat_gradient, ord=2, axis=1) - 1.) )
-                self.L_critic = -self.L_surrogate + self.gradient_lambda * gradient_penalty
+                gradient_penalty = tf.reduce_mean( self.gradient_lambda * tf.square(tf.norm(f_x_hat_gradient, ord=2, axis=1) - 1.) )
+                self.L_critic = -self.L_surrogate + gradient_penalty
 
         self.d_summary = tf.summary.merge([tf.summary.histogram("loss/L_critic", self.L_critic),
                                            tf.summary.histogram("loss/gradient_penalty", gradient_penalty)])
@@ -103,11 +103,11 @@ class cramer_dcgan(object):
 
         d_optim = tf.train.AdamOptimizer(learning_rate, beta1=beta1)
         d_optim = hvd.DistributedOptimizer(d_optim)
-        d_optim = d_optim.minimize(self.L_critic, var_list=self.d_vars)
+        d_optim = d_optim.minimize(self.L_critic, var_list=self.d_vars, global_step=self.global_step)
 
         g_optim = tf.train.AdamOptimizer(learning_rate, beta1=beta1)
         g_optim = hvd.DistributedOptimizer(g_optim)
-        g_optim = g_optim.minimize(self.L_generator, var_list=self.g_vars, global_step=self.global_step)
+        g_optim = g_optim.minimize(self.L_generator, var_list=self.g_vars)
 
         return d_optim, g_optim
 
