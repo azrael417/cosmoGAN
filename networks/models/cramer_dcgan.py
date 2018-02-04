@@ -103,13 +103,13 @@ class cramer_dcgan(object):
 
         d_optim = tf.train.AdamOptimizer(learning_rate, beta1=beta1)
         d_optim = hvd.DistributedOptimizer(d_optim)
-        d_optim = d_optim.minimize(self.L_critic, var_list=self.d_vars, global_step=self.global_step)
+        d_optim = d_optim.minimize(self.L_critic, var_list=self.d_vars)
 
         g_optim = tf.train.AdamOptimizer(learning_rate, beta1=beta1)
         g_optim = hvd.DistributedOptimizer(g_optim)
-        g_optim = g_optim.minimize(self.L_generator, var_list=self.g_vars)
+        g_optim = g_optim.minimize(self.L_generator, var_list=self.g_vars, global_step=self.global_step)
 
-        return tf.group(d_optim, g_optim, name="all_optims")
+        return d_optim, g_optim
 
                                                    
     def generator(self, z):

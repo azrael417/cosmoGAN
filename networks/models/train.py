@@ -119,7 +119,8 @@ def train_cramer_dcgan(data, config):
                            transpose_b=config.transpose_matmul_b)
 
         gan.training_graph()
-        update_op = gan.optimizer(config.learning_rate, config.beta1)
+        d_update_op, g_update_op = gan.optimizer(config.learning_rate, config.beta1)
+        update_op = tf.group(d_update_op, g_update_op, name="all_optims")
 
         checkpoint_dir = os.path.join(config.checkpoint_dir, config.experiment)
 
@@ -169,17 +170,31 @@ def train_cramer_dcgan(data, config):
                 perm = np.random.permutation(data.shape[0])
 
                 #do the epoch
+                global_step = 0
                 for idx in range(0, num_batches):
+                    
+                    #get new batch
                     batch_images = data[perm[idx*config.batch_size:(idx+1)*config.batch_size]]
-
-                    _, g_sum, d_sum = sess.run([update_op, gan.g_summary, gan.d_summary], feed_dict={gan.images: batch_images})
+                    
+                    if global_step > 1:
+                        #do individual updating
+                        #update discriminator n_up times:
+                        for n in range(0, config.n_up):
+                            _, g_sum, d_sum = sess.run([d_update_op, gan.g_summary, gan.d_summary], feed_dict={gan.images: batch_images})
+                        #update generator
+                        _, g_sum, d_sum = sess.run([g_update_op, gan.g_summary, gan.d_summary], feed_dict={gan.images: batch_images})
+                    else:
+                        #do combined updates
+                        _, g_sum, d_sum = sess.run([update_op, gan.g_summary, gan.d_summary], feed_dict={gan.images: batch_images})
+                    
+                    #get step count
                     global_step = sess.run(gan.global_step)
-                                        
+                    
+                    #print some stats
                     if config.verbose:
                         L_generator, L_critic, L_surrogate = sess.run([gan.L_generator, gan.L_critic, gan.L_surrogate],feed_dict={gan.images: batch_images})
                         print("Epoch: [%2d] Step: [%4d/%4d] time: %4.4f, c_loss: %.8f, s_loss: %.8f, g_loss: %.8f" \
                                 % (epoch, idx, num_batches, time.time() - start_time, L_critic, L_surrogate, L_generator))
-
                     elif global_step%100 == 0:
                         print("Epoch: [%2d] Step: [%4d/%4d] time: %4.4f"%(epoch, idx, num_batches, time.time() - start_time))
 
