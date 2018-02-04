@@ -60,11 +60,10 @@ class cramer_dcgan(object):
                 gradient_penalty = tf.reduce_mean( tf.square(tf.norm(f_x_hat_gradient, ord=2, axis=1) - 1.) )
                 self.L_critic = -self.L_surrogate + self.gradient_lambda * gradient_penalty
 
-        self.d_summary = tf.summary.merge([tf.summary.histogram("loss/L_generator", self.L_generator),
-                                           tf.summary.histogram("loss/L_critic", self.L_critic),
+        self.d_summary = tf.summary.merge([tf.summary.histogram("loss/L_critic", self.L_critic),
                                            tf.summary.histogram("loss/gradient_penalty", gradient_penalty)])
 
-        g_sum = [tf.summary.scalar("loss/L_surrogate", self.L_surrogate)]
+        g_sum = [tf.summary.histogram("loss/L_generator", self.L_generator), tf.summary.scalar("loss/L_surrogate", self.L_surrogate)]
 
         if self.data_format == "NHWC": # tf.summary.image is not implemented for NCHW
             g_sum.append(tf.summary.image("G", xg, max_outputs=4))
