@@ -1,4 +1,5 @@
 import tensorflow as tf
+import horovod.tensorflow as hvd
 from .ops import linear, conv2d, conv2d_transpose, lrelu
 
 class cramer_dcgan(object):
@@ -25,9 +26,13 @@ class cramer_dcgan(object):
 
         self._check_architecture_consistency()
 
+    def gendist(self, x0, x1):
+        h = self.discriminator
+        return tf.norm(h(x0) - h(x1), ord=2, axis=1)
+
     def critic(self, x, xgp):
         h = self.discriminator
-        return tf.norm(h(x) - h(xgp), axis=1) - tf.norm(h(x), axis=1)
+        return self.gendist(x, xgp) - tf.norm(h(x), ord=2, axis=1)
 
     def training_graph(self):
 
@@ -43,17 +48,20 @@ class cramer_dcgan(object):
         xgp = self.generator(self.zp)
 
         with tf.name_scope("losses"):
+            with tf.name_scope("L_generator"):
+                self.L_generator = tf.reduce_mean(self.gendist(x,xg) + self.gendist(x,xgp) - self.gendist(xg,xgp))
             with tf.name_scope("L_surrogate"):
                 self.L_surrogate = tf.reduce_mean(self.critic(x, xgp) - self.critic(xg, xgp))
             with tf.name_scope("L_critic"):
                 epsilon = tf.random_uniform([self.batch_size, 1, 1, 1], minval=0., maxval=1., dtype=tf.float32)
-                x_hat = epsilon * x + (1-epsilon) * xg
+                x_hat = xg + epsilon * (x - xg)
                 f_x_hat = self.critic(x_hat, xgp)
                 f_x_hat_gradient = tf.gradients(f_x_hat, x_hat)[0]
-                gradient_penalty = tf.reduce_mean(self.gradient_lambda * tf.square(tf.norm(f_x_hat_gradient, axis=1) - 1))
-                self.L_critic = -self.L_surrogate + gradient_penalty
+                gradient_penalty = tf.reduce_mean( tf.square(tf.norm(f_x_hat_gradient, ord=2, axis=1) - 1.) )
+                self.L_critic = -self.L_surrogate + self.gradient_lambda * gradient_penalty
 
-        self.d_summary = tf.summary.merge([tf.summary.histogram("loss/L_critic", self.L_critic),
+        self.d_summary = tf.summary.merge([tf.summary.histogram("loss/L_generator", self.L_generator),
+                                           tf.summary.histogram("loss/L_critic", self.L_critic),
                                            tf.summary.histogram("loss/gradient_penalty", gradient_penalty)])
 
         g_sum = [tf.summary.scalar("loss/L_surrogate", self.L_surrogate)]
@@ -69,7 +77,7 @@ class cramer_dcgan(object):
         with tf.variable_scope("counters") as counters_scope:
             self.epoch = tf.Variable(-1, name='epoch', trainable=False)
             self.increment_epoch = tf.assign(self.epoch, self.epoch+1)
-            self.global_step = tf.Variable(0, name='global_step', trainable=False)
+            self.global_step = tf.train.get_or_create_global_step()
 
         self.saver = tf.train.Saver(max_to_keep=8000)
 
@@ -94,11 +102,13 @@ class cramer_dcgan(object):
 
     def optimizer(self, learning_rate, beta1):
 
-        d_optim = tf.train.AdamOptimizer(learning_rate, beta1=beta1) \
-                                         .minimize(self.L_critic, var_list=self.d_vars, global_step=self.global_step)
+        d_optim = tf.train.AdamOptimizer(learning_rate, beta1=beta1)
+        d_optim = hvd.DistributedOptimizer(d_optim)
+        d_optim = d_optim.minimize(self.L_critic, var_list=self.d_vars, global_step=self.global_step)
 
-        g_optim = tf.train.AdamOptimizer(learning_rate, beta1=beta1) \
-                                         .minimize(self.L_surrogate, var_list=self.g_vars)
+        g_optim = tf.train.AdamOptimizer(learning_rate, beta1=beta1)
+        g_optim = hvd.DistributedOptimizer(g_optim)
+        g_optim = g_optim.minimize(self.L_generator, var_list=self.g_vars)
 
         return tf.group(d_optim, g_optim, name="all_optims")
 
