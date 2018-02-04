@@ -153,7 +153,11 @@ def train_cramer_dcgan(data, config):
         init_op = tf.global_variables_initializer()
         
         print("Starting Session")
-        with tf.train.MonitoredTrainingSession(config=sess_config, hooks=hooks) as sess:
+        #with tf.train.MonitoredTrainingSession(config=sess_config, hooks=hooks) as sess:
+        with tf.Session(config=sess_config) as sess:
+            
+            #wrap to CLI
+            sess = tf_debug.LocalCLIDebugWrapperSession(sess)
             
             #init global variables
             sess.run(init_op, feed_dict={gan.images: data[0:config.batch_size,:,:,:]})
@@ -164,7 +168,8 @@ def train_cramer_dcgan(data, config):
             start_time = time.time()
             
             #while loop with epoch counter stop hook
-            while not sess.should_stop():
+            #while not sess.should_stop():
+            while True:
                 
                 #permute data
                 perm = np.random.permutation(data.shape[0])
@@ -176,7 +181,7 @@ def train_cramer_dcgan(data, config):
                     #get new batch
                     batch_images = data[perm[idx*config.batch_size:(idx+1)*config.batch_size]]
                     
-                    if global_step%n_up==0:
+                    if True: #global_step%config.n_up==0:
                         #do combined update
                         _, g_sum, d_sum = sess.run([update_op, gan.g_summary, gan.d_summary], feed_dict={gan.images: batch_images})
                     else:

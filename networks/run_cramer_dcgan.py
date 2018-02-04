@@ -32,7 +32,7 @@ command = 'python -m models.main --model cramer_dcgan --dataset cosmo --datafile
           '--data_format %s --transpose_matmul_b %s --verbose %s --num_inter_threads %i --num_intra_threads %i'%(datafile, output_size, learning_rate, n_up, flip_labels, experiment,\
                                                                                                                 epoch, batch_size, z_dim,\
                                                                                                                 nd_layers, ng_layers, gf_dim, df_dim, save_every_step,\
-                                                                                                                data_format, transpose_matmul_b, verbose, 2, 33)
+                                                                                                                data_format, transpose_matmul_b, verbose, 2, 16)
 
 if not os.path.isdir('output'):
     os.mkdir('output')
