@@ -5,6 +5,7 @@ import subprocess
 datafile = '/global/cscratch1/sd/tkurth/gb2018/cosmoGAN/tiny_set/cosmo_primary_256_50k_train.npy'
 output_size = 256
 epoch = 300
+learning_rate = 0.00002
 flip_labels = 0.01
 batch_size = 64
 z_dim = 64
@@ -19,8 +20,8 @@ verbose = 'True'
 nodeid = int(os.environ['SLURM_PROCID'])
 numnodes = int(os.environ['SLURM_NNODES'])
 
-experiment = 'cramer_dcgan_cosmo_primary_256_200k_batchSize%i_flipLabel%0.3f_'\
-             'nd%i_ng%i_gfdim%i_dfdim%i_zdim%i_nodes%i_rank%i'%(batch_size, flip_labels, nd_layers,\
+experiment = 'cramer_dcgan_cosmo_primary_256_200k_batchSize%i_learningRate_%0.6f_flipLabel%0.3f_'\
+             'nd%i_ng%i_gfdim%i_dfdim%i_zdim%i_nodes%i_rank%i'%(batch_size, learning_rate, flip_labels, nd_layers,\
                                                                  ng_layers, gf_dim, df_dim, z_dim, numnodes, nodeid)
 
 command = 'python -m models.main --model cramer_dcgan --dataset cosmo --datafile %s '\
