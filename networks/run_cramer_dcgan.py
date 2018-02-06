@@ -2,7 +2,7 @@ import os
 import subprocess
 
 #datafile = '/global/cscratch1/sd/tkurth/gb2018/cosmoGAN/small_set/cosmo_primary_256_200k_train.npy'
-datafile = '/global/cscratch1/sd/tkurth/gb2018/cosmoGAN/tiny_set/cosmo_primary_256_50k_train.npy'
+datafile = '/Users/tkurth/Dropbox/Documents/NERSC/DataScience/cosmoGAN/data/cosmo_primary_256_100_train.npy'
 output_size = 256
 epoch = 300
 learning_rate = 0.00002
@@ -15,7 +15,7 @@ ng_layers = 4
 gf_dim = 64
 df_dim = 64
 save_every_step = 'False'
-data_format = 'NCHW'
+data_format = 'NHWC'
 transpose_matmul_b = 'True'
 verbose = 'True'
 nodeid = int(os.environ['SLURM_PROCID'])

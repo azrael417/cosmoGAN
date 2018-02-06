@@ -1,6 +1,10 @@
 import tensorflow as tf
-import horovod.tensorflow as hvd
-import train
+use_horovod = True
+try:
+    import horovod.tensorflow as hvd
+except:
+    use_horovod = False
+import models.train as train
 import numpy as np
 import pprint
 
@@ -31,11 +35,22 @@ flags.DEFINE_boolean("save_every_step", False, "Save a checkpoint after every st
 flags.DEFINE_boolean("verbose", True, "print loss on every step [False]")
 flags.DEFINE_integer("num_inter_threads", 1, "number of concurrent tasks [1]")
 flags.DEFINE_integer("num_intra_threads", 4, "number of threads per task [4]")
+#some comm hacking
+flags.DEFINE_integer("comm_size", 1, "number of ranks [1]")
+flags.DEFINE_integer("comm_rank", 0, "mpi rank id [0]")
+flags.DEFINE_integer("comm_local_rank", 0, "node-local mpi rank id [0]")
 config = flags.FLAGS
 
 def main(_):
     #init horovod
-    hvd.init()
+    config.comm_size = 1
+    config.comm_rank = 0
+    config.comm_local_rank = 0
+    if use_horovod:
+        hvd.init()
+        config.comm_size = hvd.size()
+        config.comm_rank = hvd.rank()
+        config.comm_local_rank = hvd.local_rank()
        
     pprint.PrettyPrinter().pprint(config.__flags)
 
@@ -49,10 +64,10 @@ def get_data():
 
     #make sure that each node only works on its chunk of the data
     num_samples = data.shape[0]
-    num_ranks = hvd.size()
+    num_ranks = config.comm_size
     num_samples_per_rank = num_samples // num_ranks
-    start = num_samples_per_rank*hvd.rank()
-    end = np.min([num_samples_per_rank*(hvd.rank()+1),num_samples])
+    start = num_samples_per_rank*config.comm_rank
+    end = np.min([num_samples_per_rank*(config.comm_rank+1),num_samples])
     data = data[start:end,:,:]
 
     if config.data_format == 'NHWC':

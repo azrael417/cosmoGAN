@@ -1,5 +1,10 @@
 import tensorflow as tf
-import horovod.tensorflow as hvd
+use_horovod = False
+try:
+    import horovod.tensorflow as hvd
+except:
+    use_horovd = False
+    
 from .ops import linear, conv2d, conv2d_transpose, lrelu
 
 class cramer_dcgan(object):
@@ -102,11 +107,13 @@ class cramer_dcgan(object):
     def optimizer(self, learning_rate, beta1):
 
         d_optim = tf.train.AdamOptimizer(learning_rate, beta1=beta1)
-        d_optim = hvd.DistributedOptimizer(d_optim)
+        if use_horovod:
+            d_optim = hvd.DistributedOptimizer(d_optim)
         d_optim = d_optim.minimize(self.L_critic, var_list=self.d_vars, global_step=self.global_step)
 
         g_optim = tf.train.AdamOptimizer(learning_rate, beta1=beta1)
-        g_optim = hvd.DistributedOptimizer(g_optim)
+        if use_horovod:
+            g_optim = hvd.DistributedOptimizer(g_optim)
         g_optim = g_optim.minimize(self.L_generator, var_list=self.g_vars)
 
         return d_optim, g_optim
@@ -155,8 +162,11 @@ class cramer_dcgan(object):
 
             # h1 = linear(reshape(h0))
             hn = linear(tf.reshape(chain, [self.batch_size, -1]), self.d_out_dim, 'h%i_lin'%self.nd_layers, transpose_b=self.transpose_b)
-
+            ##I am not sure if that is right but it would be equivalent to the general dcgan network:
+            #hn = tf.nn.sigmoid(hn)
+            
             return hn
+
 
     def _tensor_data_format(self, N, H, W, C):
         if self.data_format == "NHWC":
