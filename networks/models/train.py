@@ -2,7 +2,11 @@ import os
 import time
 import numpy as np
 import tensorflow as tf
-import horovod.tensorflow as hvd
+use_horovod = True
+try:
+    import horovod.tensorflow as hvd
+except:
+    use_horovod = False
 import dcgan
 from cramer_dcgan import cramer_dcgan
 from utils import save_checkpoint, load_checkpoint
@@ -39,8 +43,14 @@ def train_dcgan(data, config):
                                    allow_soft_placement=True)
 
         #horovod additions
-        sess_config.gpu_options.visible_device_list = str(hvd.local_rank())
-        hooks = [hvd.BroadcastGlobalVariablesHook(0)]
+        hooks = []
+        comm_size = 1
+        comm_rank = 0
+        if use_horovod:
+            sess_config.gpu_options.visible_device_list = str(hvd.local_rank())
+            hooks.append(hvd.BroadcastGlobalVariablesHook(0))
+            comm_size = hvd.size()
+            comm_rank = hvd.rank()
         
         #stop hook
         num_batches = data.shape[0] // config.batch_size
@@ -52,7 +62,7 @@ def train_dcgan(data, config):
         
         #checkpoint hook for fine grained checkpointing
         #save after every 10 epochs but only on node 0:
-        if hvd.rank() == 0:
+        if comm_rank == 0:
             checkpoint_save_freq = num_batches * 10
             checkpoint_saver = tf.train.Saver(max_to_keep = 1000)
             hooks.append(tf.train.CheckpointSaverHook(checkpoint_dir=checkpoint_dir, save_steps=checkpoint_save_freq, saver=checkpoint_saver))
@@ -131,8 +141,14 @@ def train_cramer_dcgan(data, config):
                                    allow_soft_placement=True)
 
         #horovod additions
-        sess_config.gpu_options.visible_device_list = str(hvd.local_rank())
-        hooks = [hvd.BroadcastGlobalVariablesHook(0)]
+        hooks = []
+        comm_size = 1
+        comm_rank = 0
+        if use_horovod:
+            sess_config.gpu_options.visible_device_list = str(hvd.local_rank())
+            hooks.append(hvd.BroadcastGlobalVariablesHook(0))
+            comm_size = hvd.size()
+            comm_rank = hvd.rank()
         
         #stop hook
         num_batches = data.shape[0] // config.batch_size
@@ -144,7 +160,7 @@ def train_cramer_dcgan(data, config):
         
         #checkpoint hook for fine grained checkpointing
         #save after every 10 epochs but only on node 0:
-        if hvd.rank() == 0:
+        if comm_rank == 0:
             checkpoint_save_freq = num_batches * 10
             checkpoint_saver = tf.train.Saver(max_to_keep = 1000)
             hooks.append(tf.train.CheckpointSaverHook(checkpoint_dir=checkpoint_dir, save_steps=checkpoint_save_freq, saver=checkpoint_saver))
@@ -157,7 +173,7 @@ def train_cramer_dcgan(data, config):
         with tf.Session(config=sess_config) as sess:
             
             #wrap to CLI
-            sess = tf_debug.LocalCLIDebugWrapperSession(sess)
+            #sess = tf_debug.LocalCLIDebugWrapperSession(sess)
             
             #init global variables
             sess.run(init_op, feed_dict={gan.images: data[0:config.batch_size,:,:,:]})

@@ -1,5 +1,9 @@
 import tensorflow as tf
-import horovod.tensorflow as hvd
+use_horovod = True
+try:
+    import horovod.tensorflow as hvd
+except:
+    use_horovod = False
 import train
 import numpy as np
 import pprint
@@ -35,7 +39,8 @@ config = flags.FLAGS
 
 def main(_):
     #init horovod
-    hvd.init()
+    if use_horovod:
+        hvd.init()
        
     pprint.PrettyPrinter().pprint(config.__flags)
 
@@ -49,10 +54,15 @@ def get_data():
 
     #make sure that each node only works on its chunk of the data
     num_samples = data.shape[0]
-    num_ranks = hvd.size()
+    if use_horovod:
+        num_ranks = hvd.size()
+        comm_rank = hvd.rank()
+    else:
+        num_ranks = 1
+        comm_rank = 0
     num_samples_per_rank = num_samples // num_ranks
-    start = num_samples_per_rank*hvd.rank()
-    end = np.min([num_samples_per_rank*(hvd.rank()+1),num_samples])
+    start = num_samples_per_rank*comm_rank
+    end = np.min([num_samples_per_rank*(comm_rank+1),num_samples])
     data = data[start:end,:,:]
 
     if config.data_format == 'NHWC':
