@@ -25,7 +25,13 @@ class cramer_dcgan(object):
         self.stride = 2 # this is fixed for this architecture
 
         self._check_architecture_consistency()
-
+    
+    #triggers printing of tensorlist through t
+    def debug_layer(self, t, tensorlist, name=None):
+        #reducelist = [tf.reduce_mean(x) for x in tensorlist]
+        reducelist = [tf.reduce_max(x) for x in tensorlist]
+        return tf.Print(t, reducelist, summarize=10, name=name)
+    
     def gendist(self, x0, x1):
         h = self.discriminator
         return tf.norm(h(x0) - h(x1), ord=2, axis=1)
@@ -50,8 +56,14 @@ class cramer_dcgan(object):
         with tf.name_scope("losses"):
             with tf.name_scope("L_generator"):
                 self.L_generator = tf.reduce_mean(self.gendist(x,xg) + self.gendist(x,xgp) - self.gendist(xg,xgp))
+                #DEBUG
+                self.L_generator = self.debug_layer(self.L_generator, [x,xg,xgp,self.gendist(x,xg),self.gendist(x,xgp),self.gendist(xg,xgp)], name="L_generator_debug")
+                #DEBUG
             with tf.name_scope("L_surrogate"):
                 self.L_surrogate = tf.reduce_mean(self.critic(x, xgp) - self.critic(xg, xgp))
+                #DEBUG
+                self.L_surrogate = self.debug_layer(self.L_surrogate, [self.critic(x,xgp),self.critic(xg,xgp)], name="L_surrogate_debug")
+                #DEBUG
             with tf.name_scope("L_critic"):
                 epsilon = tf.random_uniform([self.batch_size, 1, 1, 1], minval=0., maxval=1., dtype=tf.float32)
                 x_hat = xg + epsilon * (x - xg)
@@ -59,7 +71,22 @@ class cramer_dcgan(object):
                 f_x_hat_gradient = tf.gradients(f_x_hat, x_hat)[0]
                 gradient_penalty = tf.reduce_mean( self.gradient_lambda * tf.square(tf.norm(f_x_hat_gradient, ord=2, axis=1) - 1.) )
                 self.L_critic = -self.L_surrogate + gradient_penalty
-
+                #DEBUG
+                self.L_critic = self.debug_layer(self.L_critic, [epsilon, x_hat, f_x_hat, f_x_hat_gradient, gradient_penalty], name="L_critic_debug")
+                #DEBUG
+                
+        ##DEBUGGING
+        ##generator assert
+        #self.L_generator_isfinite = tf.is_finite(self.L_generator, name="L_generator_check")
+        #self.L_generator_assert_op = tf.Assert(self.L_generator_isfinite, [x,xg,xgp,self.gendist(x,xg),self.gendist(x,xgp),self.gendist(xg,xgp)], summarize=10, name="L_generator_assert")
+        ##surrogate assert
+        #self.L_surrogate_isfinite = tf.is_finite(self.L_surrogate, name="L_surrogate_check")
+        #self.L_surrogate_assert_op = tf.Assert(self.L_surrogate_isfinite, [self.critic(x,xgp),self.critic(xg,xgp)], summarize=10, name="L_surrogate_assert")
+        ##critic assert
+        #self.L_critic_isfinite = tf.is_finite(self.L_critic, name="L_critic_check")
+        #self.L_critic_assert_op = tf.Assert(self.L_critic_isfinite, [epsilon, x_hat, f_x_hat, f_x_hat_gradient, gradient_penalty], summarize=10, name="L_critic_assert")
+        ##DEBUGGING
+                
         self.d_summary = tf.summary.merge([tf.summary.histogram("loss/L_critic", self.L_critic),
                                            tf.summary.histogram("loss/gradient_penalty", gradient_penalty)])
 
