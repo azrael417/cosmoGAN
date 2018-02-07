@@ -170,8 +170,8 @@ def train_cramer_dcgan(data, config):
         init_op = tf.global_variables_initializer()
         
         print("Starting Session")
-        #with tf.train.MonitoredTrainingSession(config=sess_config, hooks=hooks) as sess:
-        with tf.Session(config=sess_config) as sess:
+        with tf.train.MonitoredTrainingSession(config=sess_config, hooks=hooks) as sess:
+        #with tf.Session(config=sess_config) as sess:
             
             #wrap to CLI
             #sess = tf_debug.LocalCLIDebugWrapperSession(sess)
@@ -185,8 +185,8 @@ def train_cramer_dcgan(data, config):
             start_time = time.time()
             
             #while loop with epoch counter stop hook
-            #while not sess.should_stop():
-            while True:
+            while not sess.should_stop():
+            #while True:
                 
                 #permute data
                 perm = np.random.permutation(data.shape[0])
@@ -200,10 +200,10 @@ def train_cramer_dcgan(data, config):
 
                     if global_step%config.n_up==0:
                         #do combined update
-                        sess.run(g_update_op, feed_dict={gan.images: batch_images})
+                        _, g_sum = sess.run([g_update_op, gan.g_summary], feed_dict={gan.images: batch_images})
                     else:
                         #update critic
-                        sess.run([d_update_op, d_clip_op], feed_dict={gan.images: batch_images})
+                        _, _, d_sum = sess.run([d_update_op, d_clip_op, gan.d_summary], feed_dict={gan.images: batch_images})
                     
                     #get step count
                     global_step = sess.run(gan.global_step)
