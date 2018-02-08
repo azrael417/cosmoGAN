@@ -1,5 +1,6 @@
 import tensorflow as tf
 
+
 def debug(t, tensorlist, name=None):
     reducelist = [tf.reduce_max(x) for x in tensorlist]
     if name:
@@ -79,3 +80,65 @@ def conv2d_transpose(input_, output_shape, data_format, kernel=5, stride=2, stdd
 def lrelu(x, alpha=0.2, name="lrelu"):
     with tf.name_scope(name):
       return tf.maximum(x, alpha*x)
+
+
+#Sinkhorn metric
+def sk_iteration_body(amat, rvec, cvec, rvecp, cvecp, iters, tolerance, min_iters):
+    #backup previous
+    rvecp = rvec
+    cvecp = cvec
+    #update
+    cvec = 1./tf.matmul(tf.matrix_transpose(amat),rvec)
+    rvec = 1./tf.matmul(amat,cvec)
+    iters+=1
+    return amat, rvec, cvec, rvecp, cvecp, iters, tolerance, min_iters
+
+
+def sk_is_converged(amat, rvec, cvec, rvecp, cvecp, iters, tolerance, min_iters):
+    normdiff = tf.norm(rvec-rvecp,ord=2)+tf.norm(cvec-cvecp,ord=2)
+    return tf.logical_or( tf.greater_equal(normdiff, tolerance), tf.less_equal(iters,min_iters) )
+
+
+def compute_mapping(amat, tolerance, min_iters):
+    #size:
+    size = amat.shape[0]
+    evec = tf.ones((size,1), dtype=tf.float32)
+    iters = tf.zeros((), tf.int32)
+    
+    #create vectors
+    rvec = evec
+    cvec = evec
+    rvecp = tf.zeros((size,1))
+    cvecp = tf.zeros((size,1))
+    #fixed point iteration
+    _, rvec, cvec, _, _, _, _, _ = tf.while_loop(sk_is_converged, sk_iteration_body, loop_vars=[amat, rvec, cvec, rvecp, cvecp, iters, tolerance, min_iters], parallel_iterations=1)
+    
+    #squeeze result
+    rvec = tf.squeeze(rvec)
+    cvec = tf.squeeze(cvec)
+    #construct pmat
+    pmat = tf.matmul(tf.matmul(tf.diag(rvec),amat),tf.diag(cvec))
+    
+    return pmat
+
+
+def compute_distance(batch_x, batch_y):
+    "compute distance matrix 1.-x*y/(|x|_2*|y|_2)"
+    #compute numerator
+    numerator = tf.matmul(batch_x, tf.matrix_transpose(batch_y))
+    #denominator pieces: take sqrt individually to improve precision
+    denominator_x = tf.expand_dims(tf.norm(batch_x, ord=2, axis=1),axis=1)
+    denominator_y = tf.expand_dims(tf.norm(batch_y, ord=2, axis=1),axis=0)
+    #denominator is the dyadic product of the two norm vectors
+    denominator = tf.matmul(denominator_x, denominator_y)
+    #return result
+    return 1.-numerator/denominator
+
+
+def ot_distance(batch_x, batch_y, tolerance, min_iters):
+    #distance matrix 
+    cmat = compute_distance(batch_x, batch_y)
+    #compute the mapping
+    mmat = compute_mapping(cmat, tolerance, min_iters)
+    #compute the loss
+    return tf.trace(tf.matmul(mmat, tf.matrix_transpose(cmat)))
