@@ -134,7 +134,7 @@ class cramer_dcgan(object):
             #d_optim = hvd.DistributedOptimizer(d_optim)
         #d_op = d_optim.minimize(self.L_critic, global_step=self.global_step, var_list=self.d_vars)
         #clip grads
-        d_grads_and_vars = [(tf.clip_by_value(g[0],-1,1),g[1]) for g in d_grads_and_vars]
+        #d_grads_and_vars = [(tf.clip_by_value(g[0],-1,1),g[1]) for g in d_grads_and_vars]
         #apply
         d_op = d_optim.apply_gradients(d_grads_and_vars, global_step=self.global_step)
         #weight clipping
@@ -152,7 +152,7 @@ class cramer_dcgan(object):
             #g_optim = hvd.DistributedOptimizer(g_optim)
         #g_op = g_optim.minimize(self.L_surrogate, var_list=self.g_vars)
         #clip grads
-        g_grads_and_vars = [(tf.clip_by_value(g[0],-1,1),g[1]) for g in g_grads_and_vars]
+        #g_grads_and_vars = [(tf.clip_by_value(g[0],-1,1),g[1]) for g in g_grads_and_vars]
         #apply
         g_op = g_optim.apply_gradients(g_grads_and_vars)
 

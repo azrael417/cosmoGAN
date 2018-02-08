@@ -101,7 +101,7 @@ def train_dcgan(data, config):
                         print("Epoch: [%2d] Step: [%4d/%4d] time: %4.4f, d_loss: %.8f, g_loss: %.8f" \
                                 % (epoch, idx, num_batches, time.time() - start_time, errD_fake+errD_real, errG))
 
-                    elif global_step%100 == 0:
+                    elif global_step%num_batches == 0:
                         print("Epoch: [%2d] Step: [%4d/%4d] time: %4.4f"%(epoch, idx, num_batches, time.time() - start_time))
 
                 # save a checkpoint every epoch
