@@ -129,9 +129,8 @@ def train_cramer_dcgan(data, config):
                            transpose_b=config.transpose_matmul_b)
 
         gan.training_graph()
-        d_update_op, g_update_op = gan.optimizer(config.learning_rate, config.beta1)
+        d_update_op, g_update_op = gan.optimizer(config.learning_rate, config.beta1, clip_param=0.01)
         update_op = tf.group(d_update_op, g_update_op, name="all_optims")
-        d_clip_op = gan.clip_critic_weights(clip_param=0.01)
 
         checkpoint_dir = os.path.join(config.checkpoint_dir, config.experiment)
 
@@ -202,10 +201,10 @@ def train_cramer_dcgan(data, config):
 
                     if gstep%config.n_up==0:
                         #do combined update
-                        _, _, g_sum, d_sum = sess.run([update_op, d_clip_op, gan.g_summary, gan.d_summary], feed_dict={gan.images: batch_images})
+                        _, g_sum, d_sum = sess.run([update_op, gan.g_summary, gan.d_summary], feed_dict={gan.images: batch_images})
                     else:
                         #update critic
-                        _, _, d_sum = sess.run([d_update_op, d_clip_op, gan.d_summary], feed_dict={gan.images: batch_images})
+                        _, d_sum = sess.run([d_update_op, gan.d_summary], feed_dict={gan.images: batch_images})
                     
                     #increase and get step count
                     gstep = sess.run(gan.global_step)
