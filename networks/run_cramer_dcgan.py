@@ -1,19 +1,21 @@
 import os
 import subprocess
 
+datafile = '/data0/mustafa/cosmo/data/cosmo_primary_256_200k_train.npy'
 #datafile = '/global/cscratch1/sd/tkurth/gb2018/cosmoGAN/small_set/cosmo_primary_256_200k_train.npy'
 datafile = '/Users/tkurth/Dropbox/Documents/NERSC/DataScience/cosmoGAN/data/cosmo_primary_256_100_train.npy'
+
 output_size = 256
 epoch = 300
-learning_rate = 0.00002
-n_up = 1
+learning_rate = 0.00005
+n_up = 5
 flip_labels = 0.01
-batch_size = 64
+batch_size = 16
 z_dim = 64
 nd_layers = 4
 ng_layers = 4
-gf_dim = 64
-df_dim = 64
+gf_dim = 32
+df_dim = 32
 save_every_step = 'False'
 data_format = 'NHWC'
 transpose_matmul_b = 'True'

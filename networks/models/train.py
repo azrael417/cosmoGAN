@@ -44,10 +44,14 @@ def train_dcgan(data, config):
                                    allow_soft_placement=True)
 
         #horovod additions
-        sess_config.gpu_options.visible_device_list = str(config.comm_local_rank)
         hooks = []
+        comm_size = 1
+        comm_rank = 0
         if use_horovod:
+            sess_config.gpu_options.visible_device_list = str(hvd.local_rank())
             hooks.append(hvd.BroadcastGlobalVariablesHook(0))
+            comm_size = hvd.size()
+            comm_rank = hvd.rank()
         
         #stop hook
         num_batches = data.shape[0] // config.batch_size
@@ -58,9 +62,9 @@ def train_dcgan(data, config):
         #hooks.append(tf.train.SummarySaverHook(save_steps=num_batches,output_dir='./logs/'+config.experiment+'/train'+str(hvd.rank()),summary_op=gan.d_summary))
         
         #checkpoint hook for fine grained checkpointing
-        #save after every 10 epochs but only on node 0:
-        if config.comm_rank == 0:
-            checkpoint_save_freq = num_batches * 10
+        #save after every epoch but only on node 0:
+        if comm_rank == 0:
+            checkpoint_save_freq = num_batches * 1
             checkpoint_saver = tf.train.Saver(max_to_keep = 1000)
             hooks.append(tf.train.CheckpointSaverHook(checkpoint_dir=checkpoint_dir, save_steps=checkpoint_save_freq, saver=checkpoint_saver))
         
@@ -126,7 +130,7 @@ def train_cramer_dcgan(data, config):
                            transpose_b=config.transpose_matmul_b)
 
         gan.training_graph()
-        d_update_op, g_update_op = gan.optimizer(config.learning_rate, config.beta1)
+        d_update_op, g_update_op = gan.optimizer(config.learning_rate, config.beta1, clip_param=0.01)
         update_op = tf.group(d_update_op, g_update_op, name="all_optims")
 
         checkpoint_dir = os.path.join(config.checkpoint_dir, config.experiment)
@@ -138,10 +142,14 @@ def train_cramer_dcgan(data, config):
                                    allow_soft_placement=True)
 
         #horovod additions
-        sess_config.gpu_options.visible_device_list = str(config.comm_local_rank)
         hooks = []
+        comm_size = 1
+        comm_rank = 0
         if use_horovod:
+            sess_config.gpu_options.visible_device_list = str(hvd.local_rank())
             hooks.append(hvd.BroadcastGlobalVariablesHook(0))
+            comm_size = hvd.size()
+            comm_rank = hvd.rank()
         
         #stop hook
         num_batches = data.shape[0] // config.batch_size
@@ -153,60 +161,62 @@ def train_cramer_dcgan(data, config):
         
         #checkpoint hook for fine grained checkpointing
         #save after every 10 epochs but only on node 0:
-        if config.comm_rank == 0:
-            checkpoint_save_freq = num_batches * 10
+        if comm_rank == 0:
+            print("Setting up checkpointing")
+            checkpoint_save_freq = num_batches * 1
             checkpoint_saver = tf.train.Saver(max_to_keep = 1000)
             hooks.append(tf.train.CheckpointSaverHook(checkpoint_dir=checkpoint_dir, save_steps=checkpoint_save_freq, saver=checkpoint_saver))
         
         #variables initializer
         init_op = tf.global_variables_initializer()
+        init_local_op = tf.local_variables_initializer()
         
         print("Starting Session")
-        #with tf.train.MonitoredTrainingSession(config=sess_config, hooks=hooks) as sess:
-        with tf.Session(config=sess_config) as sess:
+        with tf.train.MonitoredTrainingSession(config=sess_config, hooks=hooks) as sess:
+        #with tf.Session(config=sess_config) as sess:
             
             #wrap to CLI
             #sess = tf_debug.LocalCLIDebugWrapperSession(sess)
             
             #init global variables
-            sess.run(init_op, feed_dict={gan.images: data[0:config.batch_size,:,:,:]})
+            sess.run([init_op, init_local_op], feed_dict={gan.images: data[0:config.batch_size,:,:,:]})
 
-            load_checkpoint(sess, gan.saver, 'dcgan', checkpoint_dir, step=config.save_every_step)
+            #load_checkpoint(sess, gan.saver, 'dcgan', checkpoint_dir, step=config.save_every_step)
 
             epoch = sess.run(gan.increment_epoch)
             start_time = time.time()
             
             #while loop with epoch counter stop hook
-            #while not sess.should_stop():
-            while True:
+            while not sess.should_stop():
+            #while True:
                 
                 #permute data
                 perm = np.random.permutation(data.shape[0])
-
+                
                 #do the epoch
-                global_step = 0
+                gstep = 0
                 for idx in range(0, num_batches):
                     
                     #get new batch
                     batch_images = data[perm[idx*config.batch_size:(idx+1)*config.batch_size]]
-                    
-                    if True: #global_step%config.n_up==0:
+
+                    if gstep%config.n_up==0:
                         #do combined update
                         _, g_sum, d_sum = sess.run([update_op, gan.g_summary, gan.d_summary], feed_dict={gan.images: batch_images})
                     else:
                         #update critic
-                        _, g_sum, d_sum = sess.run([d_update_op, gan.g_summary, gan.d_summary], feed_dict={gan.images: batch_images})
+                        _, d_sum = sess.run([d_update_op, gan.d_summary], feed_dict={gan.images: batch_images})
                     
-                    #get step count
-                    global_step = sess.run(gan.global_step)
+                    #increase and get step count
+                    gstep = sess.run(gan.global_step)
                     
                     #print some stats
                     if config.verbose:
                         L_generator, L_critic, L_surrogate = sess.run([gan.L_generator, gan.L_critic, gan.L_surrogate], feed_dict={gan.images: batch_images})
                         print("Epoch: [%2d] Step: [%4d/%4d] time: %4.4f, c_loss: %.8f, s_loss: %.8f, g_loss: %.8f" \
-                                % (epoch, idx, num_batches, time.time() - start_time, L_critic, L_surrogate, L_generator))
-                    elif global_step%100 == 0:
-                        print("Epoch: [%2d] Step: [%4d/%4d] time: %4.4f"%(epoch, idx, num_batches, time.time() - start_time))
+                                % (epoch, gstep, num_batches, time.time() - start_time, L_critic, L_surrogate, L_generator))
+                    elif gstep%num_batches == 0:
+                        print("Epoch: [%2d] Step: [%4d/%4d] time: %4.4f"%(epoch, gstep, num_batches, time.time() - start_time))
 
                 # save a checkpoint every epoch
                 epoch = sess.run(gan.increment_epoch)
