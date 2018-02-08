@@ -95,7 +95,8 @@ class cramer_dcgan(object):
             self.epoch = tf.Variable(-1, name='epoch', trainable=False)
             self.increment_epoch = tf.assign(self.epoch, self.epoch+1)
             self.global_step = tf.train.get_or_create_global_step()
-
+            self.increment_step = tf.assign(self.global_step, self.global_step+1)
+        
         self.saver = tf.train.Saver(max_to_keep=8000)
 
     def inference_graph(self):
@@ -113,7 +114,8 @@ class cramer_dcgan(object):
         with tf.variable_scope("counters") as counters_scope:
             self.epoch = tf.Variable(-1, name='epoch', trainable=False)
             self.increment_epoch = tf.assign(self.epoch, self.epoch+1)
-            self.global_step = tf.Variable(0, name='global_step', trainable=False)
+        #do not put that into counters scope
+        self.global_step = tf.train.get_or_create_global_step()
 
         self.saver = tf.train.Saver(max_to_keep=8000)
 
