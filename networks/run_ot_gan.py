@@ -3,7 +3,6 @@ import subprocess
 
 datafile = '/data0/mustafa/cosmo/data/cosmo_primary_256_200k_train.npy'
 #datafile = '/global/cscratch1/sd/tkurth/gb2018/cosmoGAN/small_set/cosmo_primary_256_200k_train.npy'
-datafile = '/Users/tkurth/Dropbox/Documents/NERSC/DataScience/cosmoGAN/data/cosmo_primary_256_100_train.npy'
 
 output_size = 256
 epoch = 300
@@ -27,7 +26,7 @@ experiment = 'cramer_otgan_cosmo_primary_256_200k_batchSize%i_learningRate_%0.6f
              'nd%i_ng%i_gfdim%i_dfdim%i_zdim%i_nodes%i_rank%i'%(batch_size, learning_rate, n_up, flip_labels, nd_layers,\
                                                                  ng_layers, gf_dim, df_dim, z_dim, numnodes, nodeid)
 
-command = 'python -m models.main --model cramer_dcgan --dataset cosmo --datafile %s '\
+command = 'python -m models.main --model otgan --dataset cosmo --datafile %s '\
           '--output_size %i --learning_rate %f --n_up %i --flip_labels %f --experiment %s '\
           '--epoch %i --batch_size %i --z_dim %i '\
           '--nd_layers %i --ng_layers %i --gf_dim %i --df_dim %i --save_every_step %s '\

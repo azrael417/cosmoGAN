@@ -8,7 +8,7 @@ except:
 from .ops import linear, conv2d, conv2d_transpose, lrelu, ot_distance
 
 
-class ot_dcgan(object):
+class ot_gan(object):
     def __init__(self, output_size=64, batch_size=64, 
                  nd_layers=4, ng_layers=4, df_dim=128, gf_dim=128, 
                  c_dim=1, z_dim=100, d_out_dim=256, gradient_lambda=10., 
@@ -54,20 +54,26 @@ class ot_dcgan(object):
         h = self.discriminator
         
         # pipe through discriminator
-        xr = h(self.images_1)
-        xrp = h(self.images_2)
-        xg = h(self.generator(self.z, is_training=True))
-        xgp = h(self.generator(self.zp, is_training=True))
+        xr = self.images_1
+        xrp = self.images_2
+        xg = self.generator(self.z, is_training=True)
+        xgp = self.generator(self.zp, is_training=True)
+        
+        #apply disc
+        hxr = h(xr)
+        hxrp = h(xrp)
+        hxg = h(xg)
+        hxgp = h(xgp)
         
         #compute the optimal transport metric:
         tolerance = 0.00001
         min_iters = 20
-        w_xr_xg = ot_distance(xr, xg, tolerance, min_iters)
-        w_xr_xgp = ot_distance(xr, xgp, tolerance, min_iters)
-        w_xrp_xg = ot_distance(xrp, xg, tolerance, min_iters)
-        w_xrp_xgp = ot_distance(xrp, xgp, tolerance, min_iters)
-        w_xr_xrp = ot_distance(xr, xrp, tolerance, min_iters)
-        w_xg_xgp = ot_distance(xg, xgp, tolerance, min_iters)
+        w_xr_xg = ot_distance(hxr, hxg, tolerance, min_iters)
+        w_xr_xgp = ot_distance(hxr, hxgp, tolerance, min_iters)
+        w_xrp_xg = ot_distance(hxrp, hxg, tolerance, min_iters)
+        w_xrp_xgp = ot_distance(hxrp, hxgp, tolerance, min_iters)
+        w_xr_xrp = ot_distance(hxr, hxrp, tolerance, min_iters)
+        w_xg_xgp = ot_distance(hxg, hxgp, tolerance, min_iters)
         
         #defining loss
         with tf.name_scope("loss"):
@@ -116,13 +122,13 @@ class ot_dcgan(object):
 
     def optimizer(self, learning_rate, beta1, clip_param):
         #critic
-        d_optim = tf.train.Adam(learning_rate, beta1=beta1)
+        d_optim = tf.train.AdamOptimizer(learning_rate, beta1=beta1)
         if use_horovod:
             d_optim = hvd.DistributedOptimizer(d_optim)
         d_op = d_optim.minimize(self.ot_loss, var_list=self.d_vars)
 
         #generator
-        g_optim = tf.train.Adam(learning_rate, beta1=beta1)
+        g_optim = tf.train.AdamOptimizer(learning_rate, beta1=beta1)
         if use_horovod:
             g_optim = hvd.DistributedOptimizer(g_optim)
         g_op = g_optim.minimize(self.ot_loss, global_step=self.global_step, var_list=self.g_vars)

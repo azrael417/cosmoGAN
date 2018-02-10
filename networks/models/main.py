@@ -4,11 +4,7 @@ try:
     import horovod.tensorflow as hvd
 except:
     use_horovod = False
-<<<<<<< HEAD
 import models.train as train
-=======
-import train
->>>>>>> 9c22a1db807faadc8a73098ddaba05b174cf999b
 import numpy as np
 import pprint
 
@@ -47,7 +43,6 @@ config = flags.FLAGS
 
 def main(_):
     #init horovod
-<<<<<<< HEAD
     config.comm_size = 1
     config.comm_rank = 0
     config.comm_local_rank = 0
@@ -56,15 +51,13 @@ def main(_):
         config.comm_size = hvd.size()
         config.comm_rank = hvd.rank()
         config.comm_local_rank = hvd.local_rank()
-=======
-    if use_horovod:
-        hvd.init()
->>>>>>> 9c22a1db807faadc8a73098ddaba05b174cf999b
        
     pprint.PrettyPrinter().pprint(config.__flags)
 
     if config.model == 'dcgan':
         train.train_dcgan(get_data(), config)
+    elif config.model == 'otgan':
+        train.train_otgan(get_data(), config)
     else:
         train.train_cramer_dcgan(get_data(), config)
 
@@ -73,12 +66,6 @@ def get_data():
 
     #make sure that each node only works on its chunk of the data
     num_samples = data.shape[0]
-<<<<<<< HEAD
-    num_ranks = config.comm_size
-    num_samples_per_rank = num_samples // num_ranks
-    start = num_samples_per_rank*config.comm_rank
-    end = np.min([num_samples_per_rank*(config.comm_rank+1),num_samples])
-=======
     if use_horovod:
         num_ranks = hvd.size()
         comm_rank = hvd.rank()
@@ -88,7 +75,6 @@ def get_data():
     num_samples_per_rank = num_samples // num_ranks
     start = num_samples_per_rank*comm_rank
     end = np.min([num_samples_per_rank*(comm_rank+1),num_samples])
->>>>>>> 9c22a1db807faadc8a73098ddaba05b174cf999b
     data = data[start:end,:,:]
 
     if config.data_format == 'NHWC':
