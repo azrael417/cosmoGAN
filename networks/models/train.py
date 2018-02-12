@@ -201,9 +201,8 @@ def train_cramer_dcgan(data, config):
                     batch_images = data[perm[idx*config.batch_size:(idx+1)*config.batch_size]]
 
                     if gstep%config.n_up==0:
-                        #do combined update
-                        #_, g_sum, d_sum = sess.run([update_op, gan.g_summary, gan.d_summary], feed_dict={gan.images: batch_images})
-                        _, loss_g, loss_c, loss_s = sess.run([update_op, gan.L_generator, gan.L_critic, gan.L_surrogate], feed_dict={gan.images: batch_images})
+                        #update generator
+                        _, g_sum = sess.run([g_update_op, gan.g_summary], feed_dict={gan.images: batch_images})
                     else:
                         #update critic
                         _, d_sum = sess.run([d_update_op, gan.d_summary], feed_dict={gan.images: batch_images})
