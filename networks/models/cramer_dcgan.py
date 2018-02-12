@@ -120,23 +120,23 @@ class cramer_dcgan(object):
         self.saver = tf.train.Saver(max_to_keep=8000)
 
     def clip_critic_weights(self, clip_param=0.01):
-        clip_op = [w.assign(tf.clip_by_value(w, -clip_param, clip_param, name="critic_weight_clip")) for w in self.d_vars]
+        clip_op = [tf.assign(w, tf.clip_by_value(w, -clip_param, clip_param, name="critic_weight_clip")) for w in self.d_vars]
         return clip_op
 
     def optimizer(self, learning_rate, beta1, clip_param):
         #critic
         d_optim = tf.train.RMSPropOptimizer(learning_rate) #, beta1=beta1)
         #compute grads
-        d_grads_and_vars = d_optim.compute_gradients(self.L_critic)
+        #d_grads_and_vars = d_optim.compute_gradients(self.L_critic)
         if use_horovod:
             #allreduce
-            d_grads_and_vars = [(hvd.allreduce(g[0]),g[1]) for g in d_grads_and_vars]
-            #d_optim = hvd.DistributedOptimizer(d_optim)
-        #d_op = d_optim.minimize(self.L_critic, global_step=self.global_step, var_list=self.d_vars)
+            #d_grads_and_vars = [(hvd.allreduce(g[0]),g[1]) for g in d_grads_and_vars]
+            d_optim = hvd.DistributedOptimizer(d_optim)
+        d_op_apply = d_optim.minimize(self.L_critic, global_step=self.global_step, var_list=self.d_vars)
         #clip grads
         #d_grads_and_vars = [(tf.clip_by_value(g[0],-1,1),g[1]) for g in d_grads_and_vars]
         #apply
-        d_op_apply = d_optim.apply_gradients(d_grads_and_vars, global_step=self.global_step)
+        #d_op_apply = d_optim.apply_gradients(d_grads_and_vars, global_step=self.global_step)
         #weight clipping
         with tf.control_dependencies([d_op_apply]):
             clip_op = self.clip_critic_weights(clip_param=clip_param)
@@ -146,16 +146,16 @@ class cramer_dcgan(object):
         #generator
         g_optim = tf.train.RMSPropOptimizer(learning_rate) #, beta1=beta1)
         #compute grads
-        g_grads_and_vars = g_optim.compute_gradients(self.L_surrogate)
+        #g_grads_and_vars = g_optim.compute_gradients(self.L_surrogate)
         if use_horovod:
             #allreduce
-            g_grads_and_vars = [(hvd.allreduce(g[0]),g[1]) for g in g_grads_and_vars]
-            #g_optim = hvd.DistributedOptimizer(g_optim)
-        #g_op = g_optim.minimize(self.L_surrogate, var_list=self.g_vars)
+            #g_grads_and_vars = [(hvd.allreduce(g[0]),g[1]) for g in g_grads_and_vars]
+            g_optim = hvd.DistributedOptimizer(g_optim)
+        g_op = g_optim.minimize(self.L_surrogate, global_step=self.global_step, var_list=self.g_vars)
         #clip grads
         #g_grads_and_vars = [(tf.clip_by_value(g[0],-1,1),g[1]) for g in g_grads_and_vars]
         #apply
-        g_op = g_optim.apply_gradients(g_grads_and_vars)
+        #g_op = g_optim.apply_gradients(g_grads_and_vars)
 
         return d_op, g_op
 

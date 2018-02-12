@@ -3,7 +3,7 @@
 #some exports
 export SLURM_NNODES=1
 export SLURM_PROCID=0
-export CUDA_VISIBLE_DEVICES=2
+export CUDA_VISIBLE_DEVICES=1
 
 #add this to library path:
 export PYTHONPATH=$(pwd)/../networks
