@@ -82,7 +82,7 @@ def lrelu(x, alpha=0.2, name="lrelu"):
       return tf.maximum(x, alpha*x)
 
 
-#Sinkhorn metric
+#Sinkhorn metric: do not back-propagate through here
 def sk_iteration_body(amat, rvec, cvec, rvecp, cvecp, iters, tolerance, min_iters):
     #backup previous
     rvecp = rvec
@@ -103,7 +103,7 @@ def compute_mapping(amat, tolerance, min_iters):
     #size:
     size = amat.shape[0]
     evec = tf.ones((size,1), dtype=tf.float32)
-    iters = tf.zeros((), tf.int32)
+    iters = tf.zeros((), dtype=tf.int32)
     
     #create vectors
     rvec = evec
@@ -136,9 +136,17 @@ def compute_distance(batch_x, batch_y):
 
 
 def ot_distance(batch_x, batch_y, tolerance, min_iters):
+    #create untrainable variable for the mapping
+    mmat = tf.Variable(tf.zeros((batch_x.shape[0],batch_y.shape[0]), dtype=tf.float32), trainable=False)
     #distance matrix 
     cmat = compute_distance(batch_x, batch_y)
     #compute the mapping
-    mmat = compute_mapping(cmat, tolerance, min_iters)
+    mmat_tmp = compute_mapping(cmat, tolerance, min_iters)
+    with tf.control_dependencies([cmat, mmat_tmp]):
+        assign_op = tf.assign(mmat, mmat_tmp)
+    
+    with tf.control_dependencies([assign_op]):
+        loss = tf.trace(tf.matmul(mmat, tf.matrix_transpose(cmat)))
+    
     #compute the loss
-    return tf.trace(tf.matmul(mmat, tf.matrix_transpose(cmat)))
+    return loss
