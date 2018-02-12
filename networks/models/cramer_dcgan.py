@@ -136,11 +136,12 @@ class cramer_dcgan(object):
         #clip grads
         #d_grads_and_vars = [(tf.clip_by_value(g[0],-1,1),g[1]) for g in d_grads_and_vars]
         #apply
-        d_op = d_optim.apply_gradients(d_grads_and_vars, global_step=self.global_step)
+        d_op_apply = d_optim.apply_gradients(d_grads_and_vars, global_step=self.global_step)
         #weight clipping
-        clip_op = self.clip_critic_weights(clip_param=clip_param)
+        with tf.control_dependencies([d_op_apply]):
+            clip_op = self.clip_critic_weights(clip_param=clip_param)
         #combine
-        d_op = tf.group(d_op, *clip_op)
+        d_op = tf.group(d_op_apply, *clip_op)
 
         #generator
         g_optim = tf.train.RMSPropOptimizer(learning_rate) #, beta1=beta1)
