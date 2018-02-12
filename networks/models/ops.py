@@ -96,7 +96,7 @@ def sk_iteration_body(amat, rvec, cvec, rvecp, cvecp, iters, tolerance, min_iter
 
 def sk_is_converged(amat, rvec, cvec, rvecp, cvecp, iters, tolerance, min_iters):
     normdiff = tf.norm(rvec-rvecp,ord=2)+tf.norm(cvec-cvecp,ord=2)
-    return tf.logical_or( tf.greater_equal(normdiff, tolerance), tf.less_equal(iters,min_iters) )
+    return tf.logical_and( tf.logical_or( tf.greater_equal(normdiff, tolerance), tf.less_equal(iters,min_iters) ), tf.less_equal(iters,10*min_iters) )
 
 
 def compute_mapping(amat, tolerance, min_iters):
@@ -111,7 +111,11 @@ def compute_mapping(amat, tolerance, min_iters):
     rvecp = tf.zeros((size,1))
     cvecp = tf.zeros((size,1))
     #fixed point iteration
-    _, rvec, cvec, _, _, _, _, _ = tf.while_loop(sk_is_converged, sk_iteration_body, loop_vars=[amat, rvec, cvec, rvecp, cvecp, iters, tolerance, min_iters], parallel_iterations=1)
+    _, rvec, cvec, _, _, _, _, _ = tf.while_loop(sk_is_converged, 
+                                                 sk_iteration_body, 
+                                                 loop_vars=[amat, rvec, cvec, rvecp, cvecp, iters, tolerance, min_iters], 
+                                                 parallel_iterations=1,
+                                                 back_prop=False)
     
     #squeeze result
     rvec = tf.squeeze(rvec)

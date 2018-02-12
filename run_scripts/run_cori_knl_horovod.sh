@@ -2,7 +2,7 @@
 #SBATCH -q premium
 #SBATCH -A nstaff
 #SBATCH -C knl
-#SBATCH -t 1:00:00
+#SBATCH -t 4:00:00
 #SBATCH -J cosmogan_horovod
 
 #set up python stuff
@@ -19,5 +19,5 @@ export PYTHONPATH=$(pwd)/../networks  #:${modulebase}/lib/python2.7/site-package
 rm -r checkpoints/*
 
 #run training
-srun -N ${SLURM_NNODES} -n ${SLURM_NNODES} -c 272 -u python -u ../networks/run_cramer_dcgan.py
+srun -N ${SLURM_NNODES} -n ${SLURM_NNODES} -c 272 -u python -u ../networks/run_ot_gan.py
 #srun -N 1 -n 1 -c 272 -u python ../networks/run_cramer_dcgan.py
