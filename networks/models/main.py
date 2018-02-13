@@ -51,6 +51,8 @@ def main(_):
 
 def get_data():
     data = np.load(config.datafile, mmap_mode='r')
+    dmin = data.min()
+    dmax = data.max()
 
     #make sure that each node only works on its chunk of the data
     num_samples = data.shape[0]
@@ -70,7 +72,7 @@ def get_data():
     else: # 'NCHW'
         data = np.expand_dims(data, axis=1)
 
-    return data
+    return data, dmin, dmax
 
 if __name__ == '__main__':
     tf.app.run()

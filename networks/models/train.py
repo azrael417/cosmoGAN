@@ -12,7 +12,9 @@ from cramer_dcgan import cramer_dcgan
 from utils import save_checkpoint, load_checkpoint
 from tensorflow.python import debug as tf_debug
 
-def train_dcgan(data, config):
+def train_dcgan(datatup, config):
+
+    data, dmin, dmax = datatup
 
     training_graph = tf.Graph()
 
@@ -90,6 +92,7 @@ def train_dcgan(data, config):
                 #do the epoch
                 for idx in range(0, num_batches):
                     batch_images = data[perm[idx*config.batch_size:(idx+1)*config.batch_size]]
+                    batch_images = (batch_images - dmin) / np.float(dmax - dmin)
 
                     _, g_sum, d_sum = sess.run([update_op, gan.g_summary, gan.d_summary], feed_dict={gan.images: batch_images})
                     global_step = sess.run(gan.global_step)
@@ -212,6 +215,7 @@ def train_cramer_dcgan(data, config):
                     
                     #print some stats
                     if config.verbose:
+                        L_critic, L_surrogate, L_generator = sess.run([gan.L_critic, gan.L_surrogate, gan.L_generator], feed_dict={gan.images: batch_images})
                         print("Epoch: [%2d] Step: [%4d/%4d] time: %4.4f, c_loss: %.8f, s_loss: %.8f, g_loss: %.8f" \
                                 % (epoch, gstep, num_batches, time.time() - start_time, L_critic, L_surrogate, L_generator))
                     elif gstep%num_batches == 0:

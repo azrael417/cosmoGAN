@@ -2,7 +2,7 @@
 #SBATCH -q premium
 #SBATCH -A nstaff
 #SBATCH -C knl
-#SBATCH -t 1:00:00
+#SBATCH -t 4:00:00
 #SBATCH -J cosmogan_horovod
 
 #set up python stuff
