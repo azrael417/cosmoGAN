@@ -170,8 +170,8 @@ class cramer_dcgan(object):
             # h0 = relu(reshape(FC(z)))
             z_ = linear(z, num_filters*map_size*map_size, 'h0_lin', transpose_b=self.transpose_b)
             h0 = tf.reshape(z_, self._tensor_data_format(-1, map_size, map_size, num_filters))
-            bn0 = tf.contrib.layers.batch_norm(h0, is_training=is_training, scope='bn0', **self.batchnorm_kwargs)
-            h0 = tf.nn.relu(bn0)
+            #bn0 = tf.contrib.layers.batch_norm(h0, is_training=is_training, scope='bn0', **self.batchnorm_kwargs)
+            h0 = tf.nn.relu(h0)
 
             chain = h0
             for h in range(1, self.ng_layers):
@@ -181,7 +181,7 @@ class cramer_dcgan(object):
                 chain = conv2d_transpose(chain,
                                          self._tensor_data_format(self.batch_size, map_size, map_size, num_filters),
                                          stride=self.stride, data_format=self.data_format, name='h%i_conv2d_T'%h)
-                chain = tf.contrib.layers.batch_norm(chain, is_training=is_training, scope='bn%i'%h, **self.batchnorm_kwargs)
+                #chain = tf.contrib.layers.batch_norm(chain, is_training=is_training, scope='bn%i'%h, **self.batchnorm_kwargs)
                 chain = tf.nn.relu(chain)
 
             # h1 = conv2d_transpose(h0)
