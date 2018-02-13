@@ -113,6 +113,8 @@ def train_dcgan(datatup, config):
 
 #Cramer GAN
 def train_cramer_dcgan(data, config):
+    
+    data, dmin, dmax = datatup
 
     training_graph = tf.Graph()
 
@@ -202,6 +204,7 @@ def train_cramer_dcgan(data, config):
                     
                     #get new batch
                     batch_images = data[perm[idx*config.batch_size:(idx+1)*config.batch_size]]
+                    batch_images = (batch_images - dmin) / np.float(dmax - dmin)
 
                     if gstep%config.n_up==0:
                         #update generator
