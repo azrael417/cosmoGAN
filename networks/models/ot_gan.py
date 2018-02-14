@@ -60,10 +60,10 @@ class ot_gan(object):
         xgp = self.generator(self.zp, is_training=True)
         
         #apply disc
-        hxr = h(xr)
-        hxrp = h(xrp)
-        hxg = h(xg)
-        hxgp = h(xgp)
+        hxr = h(xr, True)
+        hxrp = h(xrp, True)
+        hxg = h(xg, True)
+        hxgp = h(xgp, True)
         
         #compute the optimal transport metric:
         tolerance = 0.00001
@@ -169,7 +169,7 @@ class ot_gan(object):
             return tf.nn.tanh(hn)
 
 
-    def discriminator(self, image):
+    def discriminator(self, image, is_training):
 
         with tf.variable_scope("discriminator", reuse=tf.AUTO_REUSE) as d_scope:
 
@@ -177,7 +177,9 @@ class ot_gan(object):
             for h in range(1, self.nd_layers):
                 # h1 = lrelu(conv2d(h0))
                 num_filters = self.df_dim if h==0 else self.df_dim*2**h
-                chain = lrelu(conv2d(chain, num_filters, self.data_format, name='h%i_conv'%h))
+                chain = conv2d(chain, num_filters, self.data_format, name='h%i_conv'%h)
+                chain = tf.contrib.layers.batch_norm(chain, is_training=is_training, scope='bn%i'%h, **self.batchnorm_kwargs)
+                chain = lrelu(chain)
 
             # h1 = linear(reshape(h0))
             hn = linear(tf.reshape(chain, [self.batch_size, -1]), self.d_out_dim, 'h%i_lin'%self.nd_layers, transpose_b=self.transpose_b)

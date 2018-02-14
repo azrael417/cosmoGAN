@@ -6,7 +6,7 @@ datafile = '/global/cscratch1/sd/tkurth/gb2018/cosmoGAN/small_set/cosmo_primary_
 
 output_size = 256
 epoch = 300
-learning_rate = 0.00005
+learning_rate = 0.001
 n_up = 5
 flip_labels = 0.01
 batch_size = 128
