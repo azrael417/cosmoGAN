@@ -66,7 +66,7 @@ def train_dcgan(data, config):
         #save after every epoch but only on node 0:
         if comm_rank == 0:
             checkpoint_save_freq = num_batches * 1
-            checkpoint_saver = tf.train.Saver(max_to_keep = 1000)
+            checkpoint_saver = gan.saver
             hooks.append(tf.train.CheckpointSaverHook(checkpoint_dir=checkpoint_dir, save_steps=checkpoint_save_freq, saver=checkpoint_saver))
         
         #variables initializer
@@ -165,7 +165,7 @@ def train_cramer_dcgan(data, config):
         if comm_rank == 0:
             print("Setting up checkpointing")
             checkpoint_save_freq = num_batches * 1
-            checkpoint_saver = tf.train.Saver(max_to_keep = 1000)
+            checkpoint_saver = gan.saver
             hooks.append(tf.train.CheckpointSaverHook(checkpoint_dir=checkpoint_dir, save_steps=checkpoint_save_freq, saver=checkpoint_saver))
         
         #variables initializer
@@ -267,8 +267,9 @@ def train_otgan(data, config):
             comm_rank = hvd.rank()
         
         #stop hook
-        num_batches = data.shape[0] // config.batch_size
-        hooks.append(tf.train.StopAtStepHook(last_step=config.epoch*num_batches))
+        num_batches = data.shape[0] // (2 * config.batch_size)
+        num_steps = config.epoch*num_batches
+        hooks.append(tf.train.StopAtStepHook(last_step=num_steps))
         
         #summary hook
         #hooks.append(tf.train.SummarySaverHook(save_steps=num_batches,output_dir='./logs/'+config.experiment+'/train'+str(hvd.rank()),summary_op=gan.g_summary))
@@ -279,7 +280,7 @@ def train_otgan(data, config):
         if comm_rank == 0:
             print("Setting up checkpointing")
             checkpoint_save_freq = num_batches * 1
-            checkpoint_saver = tf.train.Saver(max_to_keep = 1000)
+            checkpoint_saver = gan.saver
             hooks.append(tf.train.CheckpointSaverHook(checkpoint_dir=checkpoint_dir, save_steps=checkpoint_save_freq, saver=checkpoint_saver))
         
         #variables initializer
@@ -315,7 +316,6 @@ def train_otgan(data, config):
                     
                     #get new batch
                     batch_images_1 = data[perm[idx*config.batch_size:(idx+1)*config.batch_size]]
-                    idx+=1
                     batch_images_2 = data[perm[idx*config.batch_size:(idx+1)*config.batch_size]]
                     idx+=1
 
@@ -324,7 +324,7 @@ def train_otgan(data, config):
                         _, g_sum, d_sum = sess.run([update_op, gan.g_summary, gan.d_summary], feed_dict={gan.images_1: batch_images_1, gan.images_2: batch_images_2})
                     else:
                         #update generator
-                        _, g_sum = sess.run([g_update_op, gan.d_summary], feed_dict={gan.images_1: batch_images_1, gan.images_2: batch_images_2, })
+                        _, g_sum = sess.run([g_update_op, gan.d_summary], feed_dict={gan.images_1: batch_images_1, gan.images_2: batch_images_2})
                     
                     #increase and get step count
                     gstep = sess.run(gan.global_step)
@@ -332,10 +332,10 @@ def train_otgan(data, config):
                     #print some stats
                     if config.verbose:
                         loss = sess.run(gan.ot_loss, feed_dict={gan.images_1: batch_images_1, gan.images_2: batch_images_2})
-                        print("Epoch: [%2d] Step: [%4d/%4d] time: %4.4f, loss: %.8f" \
-                                % (epoch, gstep, num_batches, time.time() - start_time, loss))
+                        print("Rank %2d, Epoch: [%2d] Step: [%4d/%4d] time: %4.4f, loss: %.8f" \
+                                % (comm_rank, epoch, gstep, num_steps, time.time() - start_time, loss))
                     elif gstep%num_batches == 0:
-                        print("Epoch: [%2d] Step: [%4d/%4d] time: %4.4f"%(epoch, gstep, num_batches, time.time() - start_time))
+                        print("Rank %2d, Epoch: [%2d] Step: [%4d/%4d] time: %4.4f"%(comm_rank, epoch, gstep, num_steps, time.time() - start_time))
 
                 # save a checkpoint every epoch
                 epoch = sess.run(gan.increment_epoch)

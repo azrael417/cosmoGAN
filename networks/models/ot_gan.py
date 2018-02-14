@@ -114,8 +114,8 @@ class ot_gan(object):
         with tf.variable_scope("counters") as counters_scope:
             self.epoch = tf.Variable(-1, name='epoch', trainable=False)
             self.increment_epoch = tf.assign(self.epoch, self.epoch+1)
-        #do not put that into counters scope
-        self.global_step = tf.train.get_or_create_global_step()
+            #do not put that into counters scope
+            self.global_step = tf.train.get_or_create_global_step()
 
         self.saver = tf.train.Saver(max_to_keep=8000)
 
