@@ -2,10 +2,11 @@ import os
 import time
 import numpy as np
 import tensorflow as tf
-import dcgan
+import wgan_dcgan as dcgan
 from utils import save_checkpoint, load_checkpoint
 
-def train_dcgan(data, config):
+def train_dcgan(datatup, config):
+    data, dmin, dmax = datatup
 
     training_graph = tf.Graph()
 
@@ -19,7 +20,6 @@ def train_dcgan(data, config):
                           gf_dim=config.gf_dim,
                           c_dim=config.c_dim,
                           z_dim=config.z_dim,
-                          flip_labels=config.flip_labels,
                           data_format=config.data_format,
                           transpose_b=config.transpose_matmul_b)
 
@@ -45,8 +45,9 @@ def train_dcgan(data, config):
 
                 for idx in range(0, num_batches):
                     batch_images = data[perm[idx*config.batch_size:(idx+1)*config.batch_size]]
+                    batc_images = (batch_images - dmin) / np.float(dmax - dmin)
 
-                    _, g_sum, d_sum = sess.run([update_op, gan.g_summary, gan.d_summary], 
+                    _, g_sum, d_sum = sess.run([update_op, gan.g_summary, gan.c_summary], 
                                                feed_dict={gan.images: batch_images})
 
                     global_step = gan.global_step.eval()
@@ -57,12 +58,11 @@ def train_dcgan(data, config):
                         save_checkpoint(sess, gan.saver, 'dcgan', checkpoint_dir, global_step, step=True)
 
                     if config.verbose:
-                        errD_fake = gan.d_loss_fake.eval()
-                        errD_real = gan.d_loss_real.eval({gan.images: batch_images})
+                        errC = gan.c_loss.eval({gan.images: batch_images})
                         errG = gan.g_loss.eval()
 
                         print("Epoch: [%2d] Step: [%4d/%4d] time: %4.4f, d_loss: %.8f, g_loss: %.8f" \
-                                % (epoch, idx, num_batches, time.time() - start_time, errD_fake+errD_real, errG))
+                                % (epoch, idx, num_batches, time.time() - start_time, errC, errG))
 
                     elif global_step%100 == 0:
                         print("Epoch: [%2d] Step: [%4d/%4d] time: %4.4f"%(epoch, idx, num_batches, time.time() - start_time))

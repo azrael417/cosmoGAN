@@ -5,13 +5,14 @@ class dcgan(object):
     def __init__(self, output_size=64, batch_size=64, 
                  gradient_penalty_mode=True, gradient_penalty_lambda=10.,
                  nd_layers=4, ng_layers=4, df_dim=128, gf_dim=128, 
-                 c_dim=1, z_dim=100, data_format="NHWC",
+                 c_dim=1, z_dim=100, data_format="NHWC", flip_labels=0.01,
                  gen_prior=tf.random_normal, transpose_b=False):
 
         self.output_size = output_size
         self.batch_size = batch_size
         self.gradient_penalty_mode = gradient_penalty_mode
         self.gradient_penalty_lambda = gradient_penalty_lambda
+        self.flip_labels = flip_labels
         self.nd_layers = nd_layers
         self.ng_layers = ng_layers
         self.df_dim = df_dim
@@ -29,6 +30,23 @@ class dcgan(object):
         self.batchnorm_kwargs = {'epsilon' : 1e-5, 'decay': 0.9, 
                                  'updates_collections': None, 'scale': True,
                                  'fused': True, 'data_format': self.data_format}
+    def _labels(self):
+        with tf.name_scope("labels"):
+            ones = tf.ones([self.batch_size, 1])
+            zeros = tf.zeros([self.batch_size, 1])
+            flip_labels = tf.constant(self.flip_labels)
+
+            if self.flip_labels > 0:
+                prob = tf.random_uniform([], 0, 1)
+
+                d_label_real = tf.cond(tf.less(prob, flip_labels), lambda: zeros, lambda: ones)
+                d_label_fake = tf.cond(tf.less(prob, flip_labels), lambda: ones, lambda: zeros)
+            else:
+                d_label_real = ones
+                d_label_fake = zeros
+
+        return d_label_real, d_label_fake
+
 
     def training_graph(self):
 
@@ -56,7 +74,7 @@ class dcgan(object):
 
             if self.gradient_penalty_mode:
                 epsilon = tf.random_uniform([self.batch_size, 1, 1, 1], minval=0., maxval=1.)
-                interpolated = g_images + epsilon * (images - g_images)
+                interpolated = g_images + epsilon * (self.images - g_images)
                 critic_scores_interpolated = self.critic(interpolated, is_training=True)
 
         with tf.name_scope("losses"):
@@ -81,7 +99,7 @@ class dcgan(object):
                                            tf.summary.scalar("loss/critic_loss", self.c_loss)])
 
         if self.gradient_penalty_mode:
-            self.c_summary = tf.summary.merge([self.d_summary,
+            self.c_summary = tf.summary.merge([self.c_summary,
                                                tf.summary.scalar("loss/gradient_penalty_term", gradient_penalty_rate * gradient_penalty)])
 
         g_sum = [tf.summary.scalar("loss/g", self.g_loss)]
@@ -120,7 +138,7 @@ class dcgan(object):
     def optimizer(self, learning_rate, beta1):
 
         d_optim = tf.train.AdamOptimizer(learning_rate, beta1=beta1) \
-                                         .minimize(self.d_loss, var_list=self.d_vars, global_step=self.global_step)
+                                         .minimize(self.c_loss, var_list=self.d_vars, global_step=self.global_step)
 
         g_optim = tf.train.AdamOptimizer(learning_rate, beta1=beta1) \
                                          .minimize(self.g_loss, var_list=self.g_vars)
