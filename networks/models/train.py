@@ -7,10 +7,25 @@ import dcgan
 from utils import save_checkpoint, load_checkpoint
 
 def train_dcgan(data, config):
-    
+
     training_graph = tf.Graph()
 
     with training_graph.as_default():
+        
+        #some dataset parameters
+        num_batches = data.shape[0] // config.batch_size
+        num_steps = config.epoch*num_batches
+        
+        #create dataset feeding:
+        trn_placeholder = tf.placeholder(data.dtype, data.shape, name="train-data-placeholder")
+        trn_dataset = tf.data.Dataset.from_tensor_slices(trn_placeholder)
+        trn_dataset = trn_dataset.shard(hvd.size(), hvd.rank())
+        trn_dataset = trn_dataset.shuffle(buffer_size=100)
+        trn_dataset = trn_dataset.repeat(config.epoch)
+        trn_dataset = trn_dataset.batch(config.batch_size)
+        #train iterator
+        train_iterator = trn_dataset.make_initializable_iterator()
+        next_element = train_iterator.get_next()
 
         print("Creating GAN")
         gan = dcgan.dcgan(output_size=config.output_size,
@@ -25,11 +40,10 @@ def train_dcgan(data, config):
                           data_format=config.data_format,
                           transpose_b=config.transpose_matmul_b)#,
                           #distributed=True)
-
-        gan.training_graph()
+        
+        #create training graph
+        gan.training_graph(images=next_element)
         update_op = gan.optimizer(config.learning_rate, config.LARS_eta)
-
-        checkpoint_dir = os.path.join(config.checkpoint_dir, config.experiment)
         
         #session config
         sess_config=tf.ConfigProto(inter_op_parallelism_threads=config.num_inter_threads,
@@ -42,8 +56,6 @@ def train_dcgan(data, config):
         hooks = [hvd.BroadcastGlobalVariablesHook(0)]
         
         #stop hook
-        num_batches = data.shape[0] // config.batch_size
-        num_steps = config.epoch*num_batches
         hooks.append(tf.train.StopAtStepHook(last_step=num_steps))
         
         #summary hook
@@ -52,6 +64,7 @@ def train_dcgan(data, config):
         
         #checkpoint hook for fine grained checkpointing
         #save after every 10 epochs but only on node 0:
+        checkpoint_dir = os.path.join(config.checkpoint_dir, config.experiment)
         if hvd.rank() == 0:
           checkpoint_save_freq = num_batches * 10
           checkpoint_saver = gan.saver
@@ -59,13 +72,14 @@ def train_dcgan(data, config):
         
         #variables initializer
         init_op = tf.global_variables_initializer()
+        init_local_op = tf.local_variables_initializer()
         
         print("Starting Session")
         with tf.train.MonitoredTrainingSession(config=sess_config, 
                                                hooks=hooks) as sess:
             
             #init global variables
-            sess.run(init_op,feed_dict={gan.images: data[0:config.batch_size,:,:,:]})
+            sess.run([init_op, init_local_op], feed_dict={trn_placeholder: data})
 
             load_checkpoint(sess, gan.saver, 'dcgan', checkpoint_dir, step=config.save_every_step)
 
@@ -74,26 +88,23 @@ def train_dcgan(data, config):
             
             #while loop with epoch counter stop hook
             while not sess.should_stop():
-                
-                #permute data
-                perm = np.random.permutation(data.shape[0])
 
-                #do the epoch                
-                for idx in range(0, num_batches):
-                    batch_images = data[perm[idx*config.batch_size:(idx+1)*config.batch_size]]
-
-                    _, g_sum, d_sum = sess.run([update_op, gan.g_summary, gan.d_summary], feed_dict={gan.images: batch_images})
+                try:
+                    _, g_sum, d_sum = sess.run([update_op, gan.g_summary, gan.d_summary], feed_dict={trn_placeholder: data})
                     gstep = sess.run(gan.global_step)
                                         
                     #verbose printing
                     if config.verbose:
-                        errD_fake, errD_real, errG = sess.run([gan.d_loss_fake,gan.d_loss_real,gan.g_loss], feed_dict={gan.images: batch_images})
+                        errD_fake, errD_real, errG = sess.run([gan.d_loss_fake,gan.d_loss_real,gan.g_loss], feed_dict={trn_placeholder: data})
 
                         print("Epoch: [%2d] Step: [%4d/%4d] time: %4.4f, d_loss: %.8f, g_loss: %.8f" \
-                                % (epoch, gstep, num_steps, time.time() - start_time, errD_fake+errD_real, errG))
+                            % (epoch, gstep, num_steps, time.time() - start_time, errD_fake+errD_real, errG))
 
                     elif gstep%100 == 0:
                         print("Epoch: [%2d] Step: [%4d/%4d] time: %4.4f"%(epoch, gstep, num_batches, time.time() - start_time))
 
-                # save a checkpoint every epoch
-                epoch = sess.run(gan.increment_epoch)
+                    # save a checkpoint every epoch
+                    epoch = sess.run(gan.increment_epoch)
+                        
+                except tf.errors.OutOfRangeError:
+                    break

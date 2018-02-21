@@ -1,4 +1,5 @@
 import tensorflow as tf
+import numpy as np
 import horovod.tensorflow as hvd
 from .ops import linear, conv2d, conv2d_transpose, lrelu
 
@@ -30,17 +31,18 @@ class dcgan(object):
                                  'updates_collections': None, 'scale': True,
                                  'fused': True, 'data_format': self.data_format}
 
-    def training_graph(self):
+    def training_graph(self, images):
 
-        if self.data_format == "NHWC":
-            self.images = tf.placeholder(tf.float32, [self.batch_size, self.output_size, self.output_size, self.c_dim], name='real_images')
-        else:
-            self.images = tf.placeholder(tf.float32, [self.batch_size, self.c_dim, self.output_size, self.output_size], name='real_images')
+        #if self.data_format == "NHWC":
+        #    self.images = tf.placeholder(tf.float32, [self.batch_size, self.output_size, self.output_size, self.c_dim], name='real_images')
+        #else:
+        #    self.images = tf.placeholder(tf.float32, [self.batch_size, self.c_dim, self.output_size, self.output_size], name='real_images')
+        #self.images = images
 
         self.z = self.gen_prior(shape=[self.batch_size, self.z_dim])
 
         with tf.variable_scope("discriminator") as d_scope:
-            d_prob_real, d_logits_real = self.discriminator(self.images, is_training=True)
+            d_prob_real, d_logits_real = self.discriminator(images, is_training=True)
 
         with tf.variable_scope("generator") as g_scope:
             g_images = self.generator(self.z, is_training=True)
@@ -80,17 +82,18 @@ class dcgan(object):
 
         self.saver = tf.train.Saver(max_to_keep=8000)
 
-    def inference_graph(self):
+    def inference_graph(self, images):
 
-        if self.data_format == "NHWC":
-            self.images = tf.placeholder(tf.float32, [self.batch_size, self.output_size, self.output_size, self.c_dim], name='real_images')
-        else:
-            self.images = tf.placeholder(tf.float32, [self.batch_size, self.c_dim, self.output_size, self.output_size], name='real_images')
+        #if self.data_format == "NHWC":
+        #    self.images = tf.placeholder(tf.float32, [self.batch_size, self.output_size, self.output_size, self.c_dim], name='real_images')
+        #else:
+        #    self.images = tf.placeholder(tf.float32, [self.batch_size, self.c_dim, self.output_size, self.output_size], name='real_images')
+        #self.images = images
 
         self.z = tf.placeholder(tf.float32, [None, self.z_dim], name='z')
 
         with tf.variable_scope("discriminator") as d_scope:
-            self.D,_ = self.discriminator(self.images, is_training=False)
+            self.D,_ = self.discriminator(images, is_training=False)
 
         with tf.variable_scope("generator") as g_scope:
             self.G = self.generator(self.z, is_training=False)
@@ -193,7 +196,9 @@ class dcgan(object):
             chain = lrelu(chain)
 
         # h1 = linear(reshape(h0))
-        hn = linear(tf.reshape(chain, [self.batch_size, -1]), 1, 'h%i_lin'%self.nd_layers, transpose_b=self.transpose_b)
+        #compute product of dimensions:
+        outsize = np.prod(chain.get_shape()[1:])
+        hn = linear(tf.reshape(chain, [self.batch_size, outsize]), 1, 'h%i_lin'%self.nd_layers, transpose_b=self.transpose_b)
 
         return tf.nn.sigmoid(hn), hn
 

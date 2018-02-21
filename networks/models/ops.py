@@ -9,10 +9,8 @@ def linear(input_, output_size, scope=None, stddev=0.02, bias_start=0.0, transpo
         w_shape = [output_size, shape[1]]
 
     with tf.variable_scope(scope or "linear"):
-        matrix = tf.get_variable('w', w_shape, tf.float32,
-                                 tf.random_normal_initializer(stddev=stddev))
-        bias = tf.get_variable('b', [output_size],
-            initializer=tf.constant_initializer(bias_start))
+        matrix = tf.get_variable('w', w_shape, tf.float32, tf.random_normal_initializer(stddev=stddev))
+        bias = tf.get_variable('b', [output_size], initializer=tf.constant_initializer(bias_start))
 
         return tf.matmul(input_, matrix, transpose_b=transpose_b) + bias
 
@@ -29,9 +27,9 @@ def conv2d(input_, out_channels, data_format, kernel=5, stride=2, stddev=0.02, n
         w = tf.get_variable('w', [kernel, kernel, in_channels, out_channels],
                             initializer=tf.truncated_normal_initializer(stddev=stddev))
         conv = tf.nn.conv2d(input_, w, strides=strides, padding='SAME', data_format=data_format)
-
         biases = tf.get_variable('biases', [out_channels], initializer=tf.constant_initializer(0.0))
-        conv = tf.reshape(tf.nn.bias_add(conv, biases, data_format=data_format), conv.get_shape())
+        out_shape = conv.get_shape()
+        conv = tf.reshape(tf.nn.bias_add(conv, biases, data_format=data_format), [-1]+list(out_shape)[1:])
 
         return conv
 
@@ -52,9 +50,9 @@ def conv2d_transpose(input_, output_shape, data_format, kernel=5, stride=2, stdd
                             initializer=tf.random_normal_initializer(stddev=stddev))
         
         deconv = tf.nn.conv2d_transpose(input_, w, output_shape=output_shape, strides=strides, data_format=data_format)
-
         biases = tf.get_variable('biases', [out_channels], initializer=tf.constant_initializer(0.0))
-        deconv = tf.reshape(tf.nn.bias_add(deconv, biases, data_format=data_format), deconv.get_shape())
+        out_shape = deconv.get_shape()
+        deconv = tf.reshape(tf.nn.bias_add(deconv, biases, data_format=data_format), [-1]+list(out_shape)[1:])
 
         return deconv
        
