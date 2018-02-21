@@ -102,11 +102,11 @@ class dcgan(object):
 
         self.saver = tf.train.Saver(max_to_keep=8000)
 
-    def optimizer(self, learning_rate, beta1):
+    def optimizer(self, learning_rate, LARS_eta = None, LARS_epsilon = 1.0/16384.0):
 
         #set up optimizers
-        d_optim = tf.train.AdamOptimizer(learning_rate, beta1=beta1)
-        g_optim = tf.train.AdamOptimizer(learning_rate, beta1=beta1)
+        d_optim = tf.train.RMSPropOptimizer(learning_rate)
+        g_optim = tf.train.RMSPropOptimizer(learning_rate)
         
         #horovod additions if distributed
         if self.distributed:
@@ -114,9 +114,37 @@ class dcgan(object):
             d_optim = hvd.DistributedOptimizer(d_optim)
             g_optim = hvd.DistributedOptimizer(g_optim)
         
+        #compute gradients
+        d_grads_and_vars = d_optim.compute_gradients(self.d_loss, var_list=self.d_vars)
+        g_grads_and_vars = g_optim.compute_gradients(self.g_loss, var_list=self.g_vars)
+        
+        # LARS gradient re-scaling
+        if LARS_eta is not None and isinstance(LARS_eta, float):
+            #discriminator
+            for idx, (g, v) in enumerate(d_grads_and_vars):
+                if g is not None:
+                    v_norm = tf.norm(tensor=v, ord=2)
+                    g_norm = tf.norm(tensor=g, ord=2)
+                    lars_local_lr = tf.cond(
+                                          pred = tf.logical_and( tf.not_equal(v_norm, tf.constant(0.0)), tf.not_equal(g_norm, tf.constant(0.0)) ),
+                                          true_fn = lambda: LARS_eta * v_norm / g_norm,
+                                          false_fn = lambda: LARS_epsilon)
+                    d_grads_and_vars[idx] = (tf.scalar_mul(lars_local_lr, g), v)
+                    
+            #generator:
+            for idx, (g, v) in enumerate(g_grads_and_vars):
+                if g is not None:
+                    v_norm = tf.norm(tensor=v, ord=2)
+                    g_norm = tf.norm(tensor=g, ord=2)
+                    lars_local_lr = tf.cond(
+                                          pred = tf.logical_and( tf.not_equal(v_norm, tf.constant(0.0)), tf.not_equal(g_norm, tf.constant(0.0)) ),
+                                          true_fn = lambda: LARS_eta * v_norm / g_norm,
+                                          false_fn = lambda: LARS_epsilon)
+                    g_grads_and_vars[idx] = (tf.scalar_mul(lars_local_lr, g), v)
+        
         #now tell the optimizers what to do
-        d_optim = d_optim.minimize(self.d_loss, var_list=self.d_vars, global_step=self.global_step)
-        g_optim = g_optim.minimize(self.g_loss, var_list=self.g_vars)
+        d_optim = d_optim.apply_gradients(d_grads_and_vars, global_step=self.global_step)
+        g_optim = g_optim.apply_gradients(g_grads_and_vars)
             
         return tf.group(d_optim, g_optim, name="all_optims")
 

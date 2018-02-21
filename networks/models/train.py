@@ -27,7 +27,7 @@ def train_dcgan(data, config):
                           #distributed=True)
 
         gan.training_graph()
-        update_op = gan.optimizer(config.learning_rate, config.beta1)
+        update_op = gan.optimizer(config.learning_rate, config.LARS_eta)
 
         checkpoint_dir = os.path.join(config.checkpoint_dir, config.experiment)
         
@@ -53,7 +53,7 @@ def train_dcgan(data, config):
         #save after every 10 epochs but only on node 0:
         if hvd.rank() == 0:
           checkpoint_save_freq = num_batches * 10
-          checkpoint_saver = tf.train.Saver(max_to_keep = 1000)
+          checkpoint_saver = gan.saver
           hooks.append(tf.train.CheckpointSaverHook(checkpoint_dir=checkpoint_dir, save_steps=checkpoint_save_freq, saver=checkpoint_saver))
         
         #variables initializer
@@ -81,9 +81,7 @@ def train_dcgan(data, config):
                 for idx in range(0, num_batches):
                     batch_images = data[perm[idx*config.batch_size:(idx+1)*config.batch_size]]
 
-                    _, g_sum, d_sum = sess.run([update_op, gan.g_summary, gan.d_summary], 
-                                               feed_dict={gan.images: batch_images})
-
+                    _, g_sum, d_sum = sess.run([update_op, gan.g_summary, gan.d_summary], feed_dict={gan.images: batch_images})
                     global_step = sess.run(gan.global_step)
                                         
                     #verbose printing
