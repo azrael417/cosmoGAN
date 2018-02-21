@@ -43,7 +43,8 @@ def train_dcgan(data, config):
         
         #stop hook
         num_batches = data.shape[0] // config.batch_size
-        hooks.append(tf.train.StopAtStepHook(last_step=config.epoch*num_batches))
+        num_steps = config.epoch*num_batches
+        hooks.append(tf.train.StopAtStepHook(last_step=num_steps))
         
         #summary hook
         #hooks.append(tf.train.SummarySaverHook(save_steps=num_batches,output_dir='./logs/'+config.experiment+'/train'+str(hvd.rank()),summary_op=gan.g_summary))
@@ -82,17 +83,17 @@ def train_dcgan(data, config):
                     batch_images = data[perm[idx*config.batch_size:(idx+1)*config.batch_size]]
 
                     _, g_sum, d_sum = sess.run([update_op, gan.g_summary, gan.d_summary], feed_dict={gan.images: batch_images})
-                    global_step = sess.run(gan.global_step)
+                    gstep = sess.run(gan.global_step)
                                         
                     #verbose printing
                     if config.verbose:
                         errD_fake, errD_real, errG = sess.run([gan.d_loss_fake,gan.d_loss_real,gan.g_loss], feed_dict={gan.images: batch_images})
 
                         print("Epoch: [%2d] Step: [%4d/%4d] time: %4.4f, d_loss: %.8f, g_loss: %.8f" \
-                                % (epoch, idx, num_batches, time.time() - start_time, errD_fake+errD_real, errG))
+                                % (epoch, gstep, num_steps, time.time() - start_time, errD_fake+errD_real, errG))
 
-                    elif global_step%100 == 0:
-                        print("Epoch: [%2d] Step: [%4d/%4d] time: %4.4f"%(epoch, idx, num_batches, time.time() - start_time))
+                    elif gstep%100 == 0:
+                        print("Epoch: [%2d] Step: [%4d/%4d] time: %4.4f"%(epoch, gstep, num_batches, time.time() - start_time))
 
                 # save a checkpoint every epoch
                 epoch = sess.run(gan.increment_epoch)
