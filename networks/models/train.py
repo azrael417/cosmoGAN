@@ -21,7 +21,7 @@ def train_dcgan(data, config):
         trn_dataset = tf.data.Dataset.from_tensor_slices(trn_placeholder)
         if hvd.size() > 1:
             trn_dataset = trn_dataset.shard(hvd.size(), hvd.rank())
-        trn_dataset = trn_dataset.shuffle(buffer_size=100)
+        #trn_dataset = trn_dataset.shuffle(buffer_size=100)
         trn_dataset = trn_dataset.repeat(config.epoch)
         trn_dataset = trn_dataset.batch(config.batch_size)
         #create feedable iterator
@@ -31,7 +31,6 @@ def train_dcgan(data, config):
         #train iterator
         trn_iterator = trn_dataset.make_initializable_iterator()
         trn_handle_string = trn_iterator.string_handle()
-        trn_init_op = iterator.make_initializer(trn_dataset)
 
         print("Creating GAN")
         gan = dcgan.dcgan(output_size=config.output_size,
@@ -90,7 +89,7 @@ def train_dcgan(data, config):
             #initialize iterator
             print("Initializing Iterator")
             trn_handle = sess.run(trn_handle_string)
-            sess.run(trn_init_op, feed_dict={handle: trn_handle, trn_placeholder: data})
+            sess.run(trn_iterator.initializer, feed_dict={handle: trn_handle, trn_placeholder: data})
 
             #load checkpoint if necessary
             load_checkpoint(sess, gan.saver, 'dcgan', checkpoint_dir, step=config.save_every_step)
