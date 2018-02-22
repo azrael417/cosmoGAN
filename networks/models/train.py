@@ -19,13 +19,19 @@ def train_dcgan(data, config):
         #create dataset feeding:
         trn_placeholder = tf.placeholder(data.dtype, data.shape, name="train-data-placeholder")
         trn_dataset = tf.data.Dataset.from_tensor_slices(trn_placeholder)
-        trn_dataset = trn_dataset.shard(hvd.size(), hvd.rank())
+        if hvd.size() > 1:
+            trn_dataset = trn_dataset.shard(hvd.size(), hvd.rank())
         trn_dataset = trn_dataset.shuffle(buffer_size=100)
         trn_dataset = trn_dataset.repeat(config.epoch)
         trn_dataset = trn_dataset.batch(config.batch_size)
+        #create feedable iterator
+        handle = tf.placeholder(tf.string, shape=[], name="iterator-placeholder")
+        iterator = tf.data.Iterator.from_string_handle(handle, trn_dataset.output_types, trn_dataset.output_shapes)
+        next_element = iterator.get_next()
         #train iterator
-        train_iterator = trn_dataset.make_initializable_iterator()
-        next_element = train_iterator.get_next()
+        trn_iterator = trn_dataset.make_initializable_iterator()
+        trn_handle_string = trn_iterator.string_handle()
+        trn_init_op = iterator.make_initializer(trn_dataset)
 
         print("Creating GAN")
         gan = dcgan.dcgan(output_size=config.output_size,
@@ -75,27 +81,36 @@ def train_dcgan(data, config):
         init_local_op = tf.local_variables_initializer()
         
         print("Starting Session")
-        with tf.train.MonitoredTrainingSession(config=sess_config, 
-                                               hooks=hooks) as sess:
+        with tf.train.MonitoredTrainingSession(config=sess_config, hooks=hooks) as sess:
             
             #init global variables
-            sess.run([init_op, init_local_op], feed_dict={trn_placeholder: data})
+            print("Initializing Variables")
+            sess.run([init_op,init_local_op])
+            
+            #initialize iterator
+            print("Initializing Iterator")
+            trn_handle = sess.run(trn_handle_string)
+            sess.run(trn_init_op, feed_dict={handle: trn_handle, trn_placeholder: data})
 
+            #load checkpoint if necessary
             load_checkpoint(sess, gan.saver, 'dcgan', checkpoint_dir, step=config.save_every_step)
-
+            
+            #start epoch counter and timings:
             epoch = sess.run(gan.increment_epoch)
             start_time = time.time()
             
             #while loop with epoch counter stop hook
             while not sess.should_stop():
-
+                
+                print("Do training loop")
+                
                 try:
-                    _, g_sum, d_sum = sess.run([update_op, gan.g_summary, gan.d_summary], feed_dict={trn_placeholder: data})
+                    _, g_sum, d_sum = sess.run([update_op, gan.g_summary, gan.d_summary], feed_dict={handle: trn_handle})
                     gstep = sess.run(gan.global_step)
-                                        
+
                     #verbose printing
                     if config.verbose:
-                        errD_fake, errD_real, errG = sess.run([gan.d_loss_fake,gan.d_loss_real,gan.g_loss], feed_dict={trn_placeholder: data})
+                        errD_fake, errD_real, errG = sess.run([gan.d_loss_fake,gan.d_loss_real,gan.g_loss], feed_dict={handle: trn_handle})
 
                         print("Epoch: [%2d] Step: [%4d/%4d] time: %4.4f, d_loss: %.8f, g_loss: %.8f" \
                             % (epoch, gstep, num_steps, time.time() - start_time, errD_fake+errD_real, errG))
@@ -103,8 +118,9 @@ def train_dcgan(data, config):
                     elif gstep%100 == 0:
                         print("Epoch: [%2d] Step: [%4d/%4d] time: %4.4f"%(epoch, gstep, num_batches, time.time() - start_time))
 
-                    # save a checkpoint every epoch
-                    epoch = sess.run(gan.increment_epoch)
+                    # increment epoch counter
+                    if gstep%num_batches == 0:
+                        epoch = sess.run(gan.increment_epoch)
                         
                 except tf.errors.OutOfRangeError:
                     break
