@@ -26,3 +26,9 @@ Executing the script in the current directory should then build and install horo
 The benchmark directory contains run scripts for Cori (`run_cori_knl_horovod.sh `) and Edison (`run_edison_horovod.sh`). While the script for cori should run out of the box as it uses a module provided to all users, the Edison script needs the replacements mentioned above, i.e.
 ```sed -i 's|thorstendl-edison-2.7|<my_environment>|g' run_edison_horovod.sh```. 
 Additionally, what might needs to be changed in both scripts is the SLURM account specified by -A, please modify that accordingly. 
+
+To submit the scripts, just specify how many nodes you want to run on:
+```
+sbatch -N <num_nodes> run_<arch>_horovod.sh
+```
+Note that the code employs one thread per physical core. If this is to be changed, please modify the run scripts accordingly.
