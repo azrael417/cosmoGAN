@@ -23,4 +23,6 @@ Copy the build scripts for edison out of this directory via ```cp hovorod_src/bu
 Executing the script in the current directory should then build and install horovod properly inside the conda environment `<my_environment>`.
 
 ## Run
-The benchmark directory contains run scripts for Cori (`run_cori_knl_horovod.sh `) and Edison (`run_edison_horovod.sh`). 
+The benchmark directory contains run scripts for Cori (`run_cori_knl_horovod.sh `) and Edison (`run_edison_horovod.sh`). While the script for cori should run out of the box as it uses a module provided to all users, the Edison script needs the replacements mentioned above, i.e.
+```sed -i 's|thorstendl-edison-2.7|<my_environment>|g' run_edison_horovod.sh```. 
+Additionally, what might needs to be changed in both scripts is the SLURM account specified by -A, please modify that accordingly. 
