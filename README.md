@@ -16,7 +16,11 @@ conda create -n <my_environment> python=2.7 tensorflow
 ```
 where `<my_environment>` should be some appropriate name.
 The `python=2.7` is important here as horovod won't build with python 3.X. After this, clone Thorsten Kurth's horovod fork via 
-```git clone git@github.com:azrael417/horovod.git hovorod_src```. Execute this command in a subfolder which is supposed to hold the horovod build later.
+```git clone git@github.com:azrael417/horovod.git hovorod_src```. 
+Execute this command in a subfolder which is supposed to hold the horovod build later.
 Copy the build scripts for edison out of this directory via ```cp hovorod_src/build_horovod_edison.sh .``` and modify the source activate line at the top with
 ```sed -i 's|thorstendl-edison-2.7|<my_environment>|g' build_horovod_edison.sh```.
 Executing the script in the current directory should then build and install horovod properly inside the conda environment `<my_environment>`.
+
+## Run
+The benchmark directory contains run scripts for Cori (`run_cori_knl_horovod.sh `) and Edison (`run_edison_horovod.sh`). 
