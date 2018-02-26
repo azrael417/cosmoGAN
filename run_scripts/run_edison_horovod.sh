@@ -1,6 +1,5 @@
 #!/bin/bash
 #SBATCH -q regular
-#SBATCH -A m1759
 #SBATCH -C ivybridge
 #SBATCH -t 2:00:00
 #SBATCH -J cosmogan_horovod
