@@ -37,4 +37,11 @@ On Edison with plain Tensorflow and Horovod built cray-mpich 7.6.2, you should s
 
 |    number of nodes      |          images/sec (median)        |      images/sec (central 68%)           |
  ------------ | :-----------: | -----------: |
-|     1       |         78.2  |         0.8  |
+|     1       |         0.819  |          0.003  |
+|     2       |         1.632  |          0.164  |
+|     4       |         3.233  |          0.319  |
+|     8       |         6.563  |          0.673  |
+|    16       |        12.673  |          1.095  |
+|    32       |        27.213  |          0.023  |
+|    64       |        98.861  |          0.355  |
+|   128       |       200.835  |          0.996  |
