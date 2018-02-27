@@ -30,3 +30,11 @@ To submit the scripts, just specify how many nodes you want to run on:
 sbatch -N <num_nodes> run_<arch>_horovod.sh
 ```
 Note that the code employs one thread per physical core. If this is to be changed, please modify the run scripts accordingly.
+
+## Results
+
+On Edison with plain Tensorflow and Horovod built cray-mpich 7.6.2, you should see the following performance
+
+|    number of nodes      |          images/sec (median)        |      images/sec (central 68%)           |
+ ------------ | :-----------: | -----------: |
+|     1       |         78.2  |         0.8  |
