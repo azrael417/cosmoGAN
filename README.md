@@ -36,7 +36,7 @@ Note that the code employs one thread per physical core. If this is to be change
 On Edison with plain Tensorflow and Horovod built cray-mpich 7.6.2, you should see the following performance
 
 |    number of nodes      |          images/sec (median)        |      images/sec (central 68%)           |
- ------------ | :-----------: | -----------: |
+ ------------: | -----------: | -----------: |
 |     1       |         0.819  |          0.003  |
 |     2       |         1.632  |          0.164  |
 |     4       |         3.233  |          0.319  |
