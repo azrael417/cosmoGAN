@@ -5,14 +5,13 @@ class dcgan(object):
     def __init__(self, output_size=64, batch_size=64, 
                  gradient_penalty_mode=True, gradient_penalty_lambda=10.,
                  nd_layers=4, ng_layers=4, df_dim=128, gf_dim=128, 
-                 c_dim=1, z_dim=100, data_format="NHWC", flip_labels=0.01,
+                 c_dim=1, z_dim=100, data_format="NHWC",
                  gen_prior=tf.random_normal, transpose_b=False):
 
         self.output_size = output_size
         self.batch_size = batch_size
         self.gradient_penalty_mode = gradient_penalty_mode
         self.gradient_penalty_lambda = gradient_penalty_lambda
-        self.flip_labels = flip_labels
         self.nd_layers = nd_layers
         self.ng_layers = ng_layers
         self.df_dim = df_dim
@@ -30,23 +29,6 @@ class dcgan(object):
         self.batchnorm_kwargs = {'epsilon' : 1e-5, 'decay': 0.9, 
                                  'updates_collections': None, 'scale': True,
                                  'fused': True, 'data_format': self.data_format}
-    def _labels(self):
-        with tf.name_scope("labels"):
-            ones = tf.ones([self.batch_size, 1])
-            zeros = tf.zeros([self.batch_size, 1])
-            flip_labels = tf.constant(self.flip_labels)
-
-            if self.flip_labels > 0:
-                prob = tf.random_uniform([], 0, 1)
-
-                d_label_real = tf.cond(tf.less(prob, flip_labels), lambda: zeros, lambda: ones)
-                d_label_fake = tf.cond(tf.less(prob, flip_labels), lambda: ones, lambda: zeros)
-            else:
-                d_label_real = ones
-                d_label_fake = zeros
-
-        return d_label_real, d_label_fake
-
 
     def training_graph(self, images):
 

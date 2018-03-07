@@ -22,7 +22,8 @@ def train_dcgan(datafiles, config):
                 }
             )
             example = tf.decode_raw(parsed_example['data_raw'],tf.float32)
-            example = tf.reshape(example,[config.output_size, config.output_size])
+            example = tf.reshape(example,
+              [config.output_size, config.output_size, config.c_dim])
             return example
              
         filenames = tf.placeholder(tf.string, shape=[None])
@@ -30,8 +31,12 @@ def train_dcgan(datafiles, config):
         dataset = dataset.map(lambda x: decode_record(x))  # Parse the record into tensors.
         dataset = dataset.repeat(config.epoch)  # Repeat the input indefinitely.
         dataset = dataset.batch(config.batch_size)
-        iterator = dataset.make_initializable_iterator()
+        # iterator = dataset.make_initializable_iterator()
+        iterator = tf.data.Iterator.from_structure(
+          dataset.output_types,
+          dataset.output_shapes)
         next_element = iterator.get_next()
+        training_init_op = iterator.make_initializer(dataset)
 
         gan = dcgan.dcgan(output_size=config.output_size,
                           batch_size=config.batch_size,
@@ -68,14 +73,14 @@ def train_dcgan(datafiles, config):
           hooks.append(tf.train.CheckpointSaverHook(checkpoint_dir=checkpoint_dir, save_steps=checkpoint_save_freq, saver=checkpoint_saver))
 
 
-       #variables initializer
+        #variables initializer
         init_op = tf.global_variables_initializer()
         init_local_op = tf.local_variables_initializer()
  
         with tf.train.MonitoredTrainingSession(config=sess_config, hooks=hooks) as sess:
             writer = tf.summary.FileWriter('./logs/'+config.experiment+'/train', sess.graph)
 
-            sess.run([init_op, init_local_op])
+            sess.run([init_op, init_local_op, training_init_op])
 
             load_checkpoint(sess, gan.saver, 'dcgan', checkpoint_dir, step=config.save_every_step)
 
