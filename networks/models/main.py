@@ -2,10 +2,11 @@ import tensorflow as tf
 import train
 import numpy as np
 import pprint
+import glob
 
 flags = tf.app.flags
 flags.DEFINE_string("dataset", "cosmo", "The name of dataset [cosmo]")
-flags.DEFINE_string("datafile", "data/cosmo_primary_64_1k_train.npy", "Input data file for cosmo")
+flags.DEFINE_string("datapath", "data/tfrecords", "Path to input data files")
 flags.DEFINE_integer("epoch", 25, "Epoch to train [25]")
 flags.DEFINE_float("learning_rate", 0.0002, "Learning rate of for adam [0.0002]")
 flags.DEFINE_float("beta1", 0.5, "Momentum term of adam [0.5]")
@@ -27,21 +28,24 @@ flags.DEFINE_boolean("verbose", True, "print loss on every step [False]")
 config = flags.FLAGS
 
 def main(_):
-
+    datafiles, n_records = get_data_files()
+    config.num_records_total = n_records
     pprint.PrettyPrinter().pprint(config.__flags)
-    train.train_dcgan(get_data(), config)
+    train.train_dcgan(datafiles, config)
 
-def get_data():
-    data = np.load(config.datafile, mmap_mode='r')
-    dmin = 0# data.min()
-    dmax = 1#data.max()
 
-    # if config.data_format == 'NHWC':
-    #     data = np.expand_dims(data, axis=-1)
-    # else: # 'NCHW'
-    #     data = np.expand_dims(data, axis=1)
+def get_data_files(n_records=None):
+    data_files = glob.glob(config.datapath + "/*.tfrecords")
+    if n_records is None:
+        n_records = 0
+        for fn in data_files:
+          for record in tf.python_io.tf_record_iterator(fn):
+             n_records += 1
+        print "# records =", n_records
+    else:
+        n_records = len(data_files) * 20
 
-    return data, dmin, dmax
+    return data_files, n_records
 
 if __name__ == '__main__':
     tf.app.run()

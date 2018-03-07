@@ -48,22 +48,22 @@ class dcgan(object):
         return d_label_real, d_label_fake
 
 
-    def training_graph(self):
+    def training_graph(self, images):
 
         with tf.variable_scope("counters") as counters_scope:
             self.epoch = tf.Variable(-1, name='epoch', trainable=False)
             self.increment_epoch = tf.assign(self.epoch, self.epoch+1)
             self.global_step = tf.train.get_or_create_global_step()
 
-        if self.data_format == "NHWC":
-            self.images = tf.placeholder(tf.float32, [self.batch_size, self.output_size, self.output_size, self.c_dim], name='real_images')
-        else:
-            self.images = tf.placeholder(tf.float32, [self.batch_size, self.c_dim, self.output_size, self.output_size], name='real_images')
+        # if self.data_format == "NHWC":
+        #     self.images = tf.placeholder(tf.float32, [self.batch_size, self.output_size, self.output_size, self.c_dim], name='real_images')
+        # else:
+        #     self.images = tf.placeholder(tf.float32, [self.batch_size, self.c_dim, self.output_size, self.output_size], name='real_images')
 
         self.z = self.gen_prior(shape=[self.batch_size, self.z_dim])
 
         with tf.variable_scope("critic") as c_scope:
-            mean_critic_scores_real = tf.reduce_mean(self.critic(self.images, is_training=True))
+            mean_critic_scores_real = tf.reduce_mean(self.critic(images, is_training=True))
 
         with tf.variable_scope("generator") as g_scope:
             g_images = self.generator(self.z, is_training=True)
@@ -113,17 +113,17 @@ class dcgan(object):
 
         self.saver = tf.train.Saver(max_to_keep=8000)
 
-    def inference_graph(self):
+    def inference_graph(self, images):
 
-        if self.data_format == "NHWC":
-            self.images = tf.placeholder(tf.float32, [self.batch_size, self.output_size, self.output_size, self.c_dim], name='real_images')
-        else:
-            self.images = tf.placeholder(tf.float32, [self.batch_size, self.c_dim, self.output_size, self.output_size], name='real_images')
+        # if self.data_format == "NHWC":
+        #     self.images = tf.placeholder(tf.float32, [self.batch_size, self.output_size, self.output_size, self.c_dim], name='real_images')
+        # else:
+        #     self.images = tf.placeholder(tf.float32, [self.batch_size, self.c_dim, self.output_size, self.output_size], name='real_images')
 
         self.z = tf.placeholder(tf.float32, [None, self.z_dim], name='z')
 
         with tf.variable_scope("discriminator") as d_scope:
-            self.D = self.critic(self.images, is_training=False)
+            self.D = self.critic(images, is_training=False)
 
         with tf.variable_scope("generator") as g_scope:
             self.G = self.generator(self.z, is_training=False)
