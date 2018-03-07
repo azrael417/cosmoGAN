@@ -31,15 +31,17 @@ def main(_):
     pprint.PrettyPrinter().pprint(config.__flags)
     train.train_dcgan(get_data(), config)
 
+
 def get_data():
     data = np.load(config.datafile, mmap_mode='r')
     dmin = 0# data.min()
     dmax = 1#data.max()
+    print data.shape
 
-    # if config.data_format == 'NHWC':
-    #     data = np.expand_dims(data, axis=-1)
-    # else: # 'NCHW'
-    #     data = np.expand_dims(data, axis=1)
+    if config.data_format == 'NHWC':
+        data = np.expand_dims(data, axis=-1)
+    else: # 'NCHW'
+        data = np.expand_dims(data, axis=1)
 
     return data, dmin, dmax
 

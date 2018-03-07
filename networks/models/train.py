@@ -45,10 +45,13 @@ def train_dcgan(datatup, config):
 
                 for idx in range(0, num_batches):
                     batch_images = data[perm[idx*config.batch_size:(idx+1)*config.batch_size]]
+                    # INVESTIGATE: typo here that's not being caught???
                     batc_images = (batch_images - dmin) / np.float(dmax - dmin)
 
-                    _, g_sum, d_sum = sess.run([update_op, gan.g_summary, gan.c_summary], 
-                                               feed_dict={gan.images: batch_images})
+                    _, g_sum, d_sum = sess.run(
+                      [update_op, gan.g_summary, gan.c_summary], 
+                      feed_dict={gan.images: batch_images}
+                    )
 
                     global_step = gan.global_step.eval()
                     writer.add_summary(g_sum, global_step)
