@@ -1,12 +1,13 @@
 import tensorflow as tf
 from .ops import linear, conv2d, conv2d_transpose, lrelu
+import numpy as np
 
 class dcgan(object):
     def __init__(self, output_size=64, batch_size=64, 
                  gradient_penalty_mode=True, gradient_penalty_lambda=10.,
                  nd_layers=4, ng_layers=4, df_dim=128, gf_dim=128, 
                  c_dim=1, z_dim=100, data_format="NHWC",
-                 gen_prior=tf.random_normal, transpose_b=False):
+                 gen_prior=tf.random_normal, transpose_b=False, distributed=False):
 
         self.output_size = output_size
         self.batch_size = batch_size
@@ -22,6 +23,7 @@ class dcgan(object):
         self.gen_prior = gen_prior
         self.transpose_b = transpose_b # transpose weight matrix in linear layers for (possible) better performance when running on HSW/KNL
         self.stride = 2 # this is fixed for this architecture
+        self.distributed = distributed
 
         self._check_architecture_consistency()
 
@@ -56,7 +58,7 @@ class dcgan(object):
 
             if self.gradient_penalty_mode:
                 epsilon = tf.random_uniform([self.batch_size, 1, 1, 1], minval=0., maxval=1.)
-                interpolated = g_images + epsilon * (self.images - g_images)
+                interpolated = g_images + epsilon * (images - g_images)
                 critic_scores_interpolated = self.critic(interpolated, is_training=True)
 
         with tf.name_scope("losses"):
@@ -86,7 +88,7 @@ class dcgan(object):
 
         g_sum = [tf.summary.scalar("loss/g", self.g_loss)]
         if self.data_format == "NHWC": # tf.summary.image is not implemented for NCHW
-            g_sum.append(tf.summary.image("G", g_images, max_outputs=4))
+            g_sum.append(tf.summary.image("G", g_images, max_outputs=8))
         self.g_summary = tf.summary.merge(g_sum)
 
         t_vars = tf.trainable_variables()
@@ -117,17 +119,53 @@ class dcgan(object):
 
         self.saver = tf.train.Saver(max_to_keep=8000)
 
-    def optimizer(self, learning_rate, beta1):
-
-        d_optim = tf.train.AdamOptimizer(learning_rate, beta1=beta1) \
-                                         .minimize(self.c_loss, var_list=self.d_vars, global_step=self.global_step)
-
-        g_optim = tf.train.AdamOptimizer(learning_rate, beta1=beta1) \
-                                         .minimize(self.g_loss, var_list=self.g_vars)
-
+    
+    def optimizer(self,learning_rate,LARS_eta=None,LARS_epsilon = 1.0/16384.0):
+        #set up optimizers
+        d_optim = tf.train.RMSPropOptimizer(learning_rate)
+        g_optim = tf.train.RMSPropOptimizer(learning_rate)
+        
+        #horovod additions if distributed
+        if self.distributed:
+            print("Enabling Distributed Updating!")
+            d_optim = hvd.DistributedOptimizer(d_optim)
+            g_optim = hvd.DistributedOptimizer(g_optim)
+        
+        #compute gradients
+        d_grads_and_vars = d_optim.compute_gradients(self.c_loss, var_list=self.d_vars)
+        g_grads_and_vars = g_optim.compute_gradients(self.g_loss, var_list=self.g_vars)
+        
+        # LARS gradient re-scaling
+        if LARS_eta is not None and isinstance(LARS_eta, float):
+            #discriminator
+            for idx, (g, v) in enumerate(d_grads_and_vars):
+                if g is not None:
+                    v_norm = tf.norm(tensor=v, ord=2)
+                    g_norm = tf.norm(tensor=g, ord=2)
+                    lars_local_lr = tf.cond(
+                                          pred = tf.logical_and( tf.not_equal(v_norm, tf.constant(0.0)), tf.not_equal(g_norm, tf.constant(0.0)) ),
+                                          true_fn = lambda: LARS_eta * v_norm / g_norm,
+                                          false_fn = lambda: LARS_epsilon)
+                    d_grads_and_vars[idx] = (tf.scalar_mul(lars_local_lr, g), v)
+                    
+            #generator:
+            for idx, (g, v) in enumerate(g_grads_and_vars):
+                if g is not None:
+                    v_norm = tf.norm(tensor=v, ord=2)
+                    g_norm = tf.norm(tensor=g, ord=2)
+                    lars_local_lr = tf.cond(
+                                          pred = tf.logical_and( tf.not_equal(v_norm, tf.constant(0.0)), tf.not_equal(g_norm, tf.constant(0.0)) ),
+                                          true_fn = lambda: LARS_eta * v_norm / g_norm,
+                                          false_fn = lambda: LARS_epsilon)
+                    g_grads_and_vars[idx] = (tf.scalar_mul(lars_local_lr, g), v)
+        
+        #now tell the optimizers what to do
+        d_optim = d_optim.apply_gradients(d_grads_and_vars, global_step=self.global_step)
+        g_optim = g_optim.apply_gradients(g_grads_and_vars)
+            
         return tf.group(d_optim, g_optim, name="all_optims")
 
-                                                   
+
     def generator(self, z, is_training):
 
         map_size = self.output_size/int(2**self.ng_layers)
@@ -173,7 +211,8 @@ class dcgan(object):
             chain = lrelu(chain)
 
         # h1 = linear(reshape(h0))
-        hn = linear(tf.reshape(chain, [self.batch_size, -1]), 1, 'h%i_lin'%self.nd_layers, transpose_b=self.transpose_b)
+        outsize = np.prod(chain.get_shape()[1:])
+        hn = linear(tf.reshape(chain, [self.batch_size, outsize]), 1, 'h%i_lin'%self.nd_layers, transpose_b=self.transpose_b)
 
         return hn
 

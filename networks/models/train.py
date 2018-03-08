@@ -5,10 +5,72 @@ import tensorflow as tf
 import wgan_dcgan as dcgan
 import horovod.tensorflow as hvd
 from utils import save_checkpoint, load_checkpoint
+from scipy import stats
+
+
+def sample_tfrecords_to_numpy(tfrecords_filenames, img_size, n_samples=1000):
+
+  def decode_record(x):
+    parsed_example = tf.parse_single_example(x,
+        features = {
+            "data_raw": tf.FixedLenFeature([],tf.string)
+        }
+    )
+
+    example = tf.decode_raw(parsed_example['data_raw'],tf.float32)
+    example = tf.reshape(example,[img_size, img_size])
+    return example
+         
+  filenames = tf.placeholder(tf.string, shape=[None])
+  dataset = tf.data.TFRecordDataset(filenames)
+  dataset = dataset.map(lambda x: decode_record(x))  # Parse the record into tensors.
+  dataset = dataset.repeat(1)  # Repeat the input indefinitely.
+  dataset = dataset.batch(n_samples)
+  iterator = dataset.make_initializable_iterator()
+  next_element = iterator.get_next()
+
+  # Initialize `iterator` with training data.
+  with tf.Session() as sess:
+      sess.run(iterator.initializer, 
+              feed_dict={filenames: tfrecords_filenames})
+      images = sess.run(next_element)
+  return images
+        
+
+def get_hist_bins(data, get_error=False):
+    y, x = np.histogram(data, bins=60, range=(-1.1,1.1))
+    x = 0.5*(x[1:]+x[:-1])
+    if get_error == True:
+        y_err = np.sqrt(y)
+        return x, y, y_err
+    else:
+        return x, y
+
+
+def compute_evaluation_stats(fake, test):
+  test_hist = get_hist_bins(test)
+  fake_hist = get_hist_bins(fake)
+  return {"KS":stats.ks_2samp(test_hist, fake_hist)[1]}
+
+
+def generate_samples(sess, dcgan, n_batches=20):
+    z_sample = np.random.normal(size=(dcgan.batch_size, dcgan.z_dim))
+    samples = sess.run(dcgan.generator, feed_dict={dcgan.z: z_sample})
+    for i in range(0, n_batches-1):
+        z_sample = np.random.normal(size=(dcgan.batch_size, dcgan.z_dim))
+        samples = np.concatenate((samples, sess.run(dcgan.G, feed_dict={dcgan.z: z_sample})))
+        
+    return np.squeeze(samples)
+
 
 def train_dcgan(datafiles, config):
+    trn_datafiles, tst_datafiles = datafiles
     num_batches = config.num_records_total // config.batch_size
     num_steps = config.epoch*num_batches
+
+    # load test data
+    test_images = sample_tfrecords_to_numpy(tst_datafiles, config.output_size)
+    print test_images.shape
 
     training_graph = tf.Graph()
 
@@ -31,12 +93,15 @@ def train_dcgan(datafiles, config):
         dataset = dataset.map(lambda x: decode_record(x))  # Parse the record into tensors.
         dataset = dataset.repeat(config.epoch)  # Repeat the input indefinitely.
         dataset = dataset.batch(config.batch_size)
+        handle = tf.placeholder(tf.string,shape=[],name="iterator-placeholder")
         # iterator = dataset.make_initializable_iterator()
-        iterator = tf.data.Iterator.from_structure(
-          dataset.output_types,
-          dataset.output_shapes)
+        iterator = tf.data.Iterator.from_string_handle(handle, 
+          dataset.output_types, dataset.output_shapes)
         next_element = iterator.get_next()
-        training_init_op = iterator.make_initializer(dataset)
+        #train iterator
+        trn_iterator = dataset.make_initializable_iterator()
+        trn_handle_string = trn_iterator.string_handle()
+        trn_init_op = iterator.make_initializer(dataset)
 
         gan = dcgan.dcgan(output_size=config.output_size,
                           batch_size=config.batch_size,
@@ -68,7 +133,7 @@ def train_dcgan(datafiles, config):
         checkpoint_dir = os.path.join(config.checkpoint_dir, config.experiment)
 
         if hvd.rank() == 0:
-          checkpoint_save_freq = num_batches * 10
+          checkpoint_save_freq = num_batches * 2
           checkpoint_saver = gan.saver
           hooks.append(tf.train.CheckpointSaverHook(checkpoint_dir=checkpoint_dir, save_steps=checkpoint_save_freq, saver=checkpoint_saver))
 
@@ -80,7 +145,13 @@ def train_dcgan(datafiles, config):
         with tf.train.MonitoredTrainingSession(config=sess_config, hooks=hooks) as sess:
             writer = tf.summary.FileWriter('./logs/'+config.experiment+'/train', sess.graph)
 
-            sess.run([init_op, init_local_op, training_init_op])
+            sess.run([init_op, init_local_op])
+  
+            #initialize iterator
+            print("Initializing Iterator")
+            trn_handle = sess.run(trn_handle_string)
+            sess.run(trn_init_op, 
+              feed_dict={handle: trn_handle, filenames: trn_datafiles})
 
             load_checkpoint(sess, gan.saver, 'dcgan', checkpoint_dir, step=config.save_every_step)
 
@@ -91,6 +162,18 @@ def train_dcgan(datafiles, config):
                 try:
                     _, g_sum, c_sum = sess.run([update_op, gan.g_summary, gan.c_summary], feed_dict={handle: trn_handle})
                     gstep = sess.run(gan.global_step)
+
+                    writer.add_summary(g_sum, gstep)
+                    writer.add_summary(c_sum, gstep)
+
+
+                    g_images = generate_samples(sess, gan)
+                    stats = compute_evaluation_stats(g_images, test_images)
+                    stats_tb = [tf.summary.scalar(k,v) for k,v in stats.iteritems()]
+                    stats_summary = tf.summary.merge(stats_tb)
+                    writer.add_summary(stats_summary, gstep)
+
+
 
                     #verbose printing
                     if config.verbose:
@@ -104,11 +187,14 @@ def train_dcgan(datafiles, config):
 
                     # increment epoch counter
                     if gstep%num_batches == 0:
-                        epoch = sess.run(gan.increment_epoch)
-                        
+                      epoch = sess.run(gan.increment_epoch)
+                      g_images = generate_images(sess, gan)
+                      stats = compute_evaluation_stats(g_images, test_images)
+                      stats_tb = [tf.summary.scalar(k,v) for k,v in stats.iteritems()]
+                      stats_summary = tf.summary.merge(stats_tb)
+                      writer.add_summary(stats_summary, gstep)
+         
+                               
                 except tf.errors.OutOfRangeError:
                     break
 
-                # save a checkpoint every epoch
-                save_checkpoint(sess, gan.saver, 'dcgan', checkpoint_dir, epoch)
-                sess.run(gan.increment_epoch)

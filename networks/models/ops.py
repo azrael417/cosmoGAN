@@ -28,10 +28,13 @@ def conv2d(input_, out_channels, data_format, kernel=5, stride=2, stddev=0.02, n
     with tf.variable_scope(name):
         w = tf.get_variable('w', [kernel, kernel, in_channels, out_channels],
                             initializer=tf.truncated_normal_initializer(stddev=stddev))
+        
         conv = tf.nn.conv2d(input_, w, strides=strides, padding='SAME', data_format=data_format)
 
         biases = tf.get_variable('biases', [out_channels], initializer=tf.constant_initializer(0.0))
-        conv = tf.reshape(tf.nn.bias_add(conv, biases, data_format=data_format), conv.get_shape())
+
+        out_shape = conv.get_shape()
+        conv = tf.reshape(tf.nn.bias_add(conv, biases, data_format=data_format), [-1]+list(out_shape)[1:])
 
         return conv
 
