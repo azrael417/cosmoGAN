@@ -34,6 +34,7 @@ def sample_tfrecords_to_numpy(tfrecords_filenames, img_size, n_samples=1000):
       sess.run(iterator.initializer, 
               feed_dict={filenames: tfrecords_filenames})
       images = sess.run(next_element)
+      sess.close()
   return images
         
 
@@ -55,7 +56,8 @@ def compute_evaluation_stats(fake, test):
 
 def generate_samples(sess, dcgan, n_batches=20):
     z_sample = np.random.normal(size=(dcgan.batch_size, dcgan.z_dim))
-    samples = sess.run(dcgan.generator, feed_dict={dcgan.z: z_sample})
+    samples = sess.run(dcgan.G, feed_dict={dcgan.z: z_sample})
+
     for i in range(0, n_batches-1):
         z_sample = np.random.normal(size=(dcgan.batch_size, dcgan.z_dim))
         samples = np.concatenate((samples, sess.run(dcgan.G, feed_dict={dcgan.z: z_sample})))
@@ -116,6 +118,7 @@ def train_dcgan(datafiles, config):
 
         gan.training_graph(next_element)
         update_op = gan.optimizer(config.learning_rate, config.LARS_eta)
+        gan.sampling_graph()
 
         #session config
         sess_config=tf.ConfigProto(inter_op_parallelism_threads=config.num_inter_threads,
@@ -166,14 +169,12 @@ def train_dcgan(datafiles, config):
                     writer.add_summary(g_sum, gstep)
                     writer.add_summary(c_sum, gstep)
 
-
+                    # compute GAN evaluation stats
                     g_images = generate_samples(sess, gan)
                     stats = compute_evaluation_stats(g_images, test_images)
                     stats_tb = [tf.summary.scalar(k,v) for k,v in stats.iteritems()]
                     stats_summary = tf.summary.merge(stats_tb)
                     writer.add_summary(stats_summary, gstep)
-
-
 
                     #verbose printing
                     if config.verbose:
