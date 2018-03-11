@@ -94,6 +94,7 @@ def train_dcgan(datafiles, config):
         dataset = tf.data.TFRecordDataset(filenames)
         if hvd.size() > 1:
             dataset = dataset.shard(hvd.size(), hvd.rank())
+        dataset = dataset.shuffle(config.batch_size*10)
         dataset = dataset.map(lambda x: decode_record(x))  # Parse the record into tensors.
         dataset = dataset.repeat(config.epoch)  # Repeat the input indefinitely.
         dataset = dataset.batch(config.batch_size)
@@ -149,7 +150,7 @@ def train_dcgan(datafiles, config):
         init_local_op = tf.local_variables_initializer()
  
         with tf.train.MonitoredTrainingSession(config=sess_config, hooks=hooks) as sess:
-            writer = tf.summary.FileWriter('./logs/'+config.experiment+'rank_rank'+str(hvd.rank())+'/train', sess.graph)
+            writer = tf.summary.FileWriter('./logs/'+config.experiment+'/train', sess.graph)
 
             sess.run([init_op, init_local_op])
   
