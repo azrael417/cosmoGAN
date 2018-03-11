@@ -1,4 +1,5 @@
 import tensorflow as tf
+import horovod.tensorflow as hvd
 from .ops import linear, conv2d, conv2d_transpose, lrelu
 import numpy as np
 
@@ -7,7 +8,7 @@ class dcgan(object):
                  gradient_penalty_mode=True, gradient_penalty_lambda=10.,
                  nd_layers=4, ng_layers=4, df_dim=128, gf_dim=128, 
                  c_dim=1, z_dim=100, data_format="NHWC",
-                 gen_prior=tf.random_normal, transpose_b=False, distributed=False):
+                 gen_prior=tf.random_normal, transpose_b=False, distributed=True):
 
         self.output_size = output_size
         self.batch_size = batch_size
