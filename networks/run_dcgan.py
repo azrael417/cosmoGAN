@@ -1,11 +1,8 @@
 import os
 import subprocess
 
-#datafile = 'data/cosmogan_maps_256_8k_1.npy'
-# datafile = '/data0/mustafa/cosmo/data/cosmo_primary_256_200k_train.npy'
-# datafile = '/data0/tkurth/data/celebA/celebA_202599_128x128.npy'
-# datafile = '/data0/adalbert/dummy_array_1.2.npy'
-datapath = '/data1/adalbert/Maps10/tfrecords/256'
+
+datapath = '/global/cscratch1/sd/tkurth/gb2018/cosmoGAN/tfrecord/256'
 output_size = 256
 c_dim = 1
 epoch = 50

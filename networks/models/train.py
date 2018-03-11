@@ -92,13 +92,14 @@ def train_dcgan(datafiles, config):
              
         filenames = tf.placeholder(tf.string, shape=[None])
         dataset = tf.data.TFRecordDataset(filenames)
+        if hvd.size() > 1:
+            dataset = dataset.shard(hvd.size(), hvd.rank())
         dataset = dataset.map(lambda x: decode_record(x))  # Parse the record into tensors.
         dataset = dataset.repeat(config.epoch)  # Repeat the input indefinitely.
         dataset = dataset.batch(config.batch_size)
         handle = tf.placeholder(tf.string,shape=[],name="iterator-placeholder")
         # iterator = dataset.make_initializable_iterator()
-        iterator = tf.data.Iterator.from_string_handle(handle, 
-          dataset.output_types, dataset.output_shapes)
+        iterator = tf.data.Iterator.from_string_handle(handle, dataset.output_types, dataset.output_shapes)
         next_element = iterator.get_next()
         #train iterator
         trn_iterator = dataset.make_initializable_iterator()
@@ -118,7 +119,9 @@ def train_dcgan(datafiles, config):
 
         gan.training_graph(next_element)
         gan.sampling_graph()
-        update_op = gan.optimizer(config.learning_rate, config.LARS_eta)
+        
+        #use LARC
+        update_op = gan.larc_optimizer(config.learning_rate)
 
         #session config
         sess_config=tf.ConfigProto(inter_op_parallelism_threads=config.num_inter_threads,
@@ -146,7 +149,7 @@ def train_dcgan(datafiles, config):
         init_local_op = tf.local_variables_initializer()
  
         with tf.train.MonitoredTrainingSession(config=sess_config, hooks=hooks) as sess:
-            writer = tf.summary.FileWriter('./logs/'+config.experiment+'/train', sess.graph)
+            writer = tf.summary.FileWriter('./logs/'+config.experiment+'rank_rank'+str(hvd.rank())+'/train', sess.graph)
 
             sess.run([init_op, init_local_op])
   
