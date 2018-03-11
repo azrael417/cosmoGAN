@@ -1,6 +1,6 @@
 import os
 import subprocess
-
+import shlex
 
 datapath = '/global/cscratch1/sd/tkurth/gb2018/cosmoGAN/tfrecord/256'
 output_size = 256
@@ -36,6 +36,6 @@ command = 'python -u -m models.main --dataset cosmo --datapath %s '\
 if not os.path.isdir('output'):
     os.mkdir('output')
 
-print command.split()
+print(command)
 f_out = open('output/'+experiment+'.log', 'w')
-subprocess.call(command.split(), stdout=f_out)
+subprocess.call(shlex.split(command), stdout=f_out)

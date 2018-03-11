@@ -149,6 +149,8 @@ def train_dcgan(datafiles, config):
         init_op = tf.global_variables_initializer()
         init_local_op = tf.local_variables_initializer()
  
+        if hvd.rank() == 0:
+            print("Starting session with {} inter- and {} intra-threads".format(config.num_inter_threads, config.num_intra_threads))
         with tf.train.MonitoredTrainingSession(config=sess_config, hooks=hooks) as sess:
             writer = tf.summary.FileWriter('./logs/'+config.experiment+'/train', sess.graph)
 
