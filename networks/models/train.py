@@ -122,7 +122,8 @@ def train_dcgan(datafiles, config):
         gan.sampling_graph()
         
         #use LARC
-        update_op = gan.larc_optimizer(config.learning_rate)
+        #update_op = gan.larc_optimizer(config.learning_rate)
+        update_op = gan.optimizer(config.learning_rate)
 
         #session config
         sess_config=tf.ConfigProto(inter_op_parallelism_threads=config.num_inter_threads,
