@@ -49,8 +49,8 @@ def get_hist_bins(data, get_error=False):
 
 
 def compute_evaluation_stats(fake, test):
-  test_hist = get_hist_bins(test)
-  fake_hist = get_hist_bins(fake)
+  test_bins, test_hist = get_hist_bins(test)
+  fake_bins, fake_hist = get_hist_bins(fake)
   return {"KS":stats.ks_2samp(test_hist, fake_hist)[1]}
 
 
@@ -117,8 +117,8 @@ def train_dcgan(datafiles, config):
                           transpose_b=config.transpose_matmul_b)
 
         gan.training_graph(next_element)
-        update_op = gan.optimizer(config.learning_rate, config.LARS_eta)
         gan.sampling_graph()
+        update_op = gan.optimizer(config.learning_rate, config.LARS_eta)
 
         #session config
         sess_config=tf.ConfigProto(inter_op_parallelism_threads=config.num_inter_threads,
@@ -169,12 +169,15 @@ def train_dcgan(datafiles, config):
                     writer.add_summary(g_sum, gstep)
                     writer.add_summary(c_sum, gstep)
 
-                    # compute GAN evaluation stats
-                    g_images = generate_samples(sess, gan)
-                    stats = compute_evaluation_stats(g_images, test_images)
-                    stats_tb = [tf.summary.scalar(k,v) for k,v in stats.iteritems()]
-                    stats_summary = tf.summary.merge(stats_tb)
-                    writer.add_summary(stats_summary, gstep)
+                    if gstep%100 == 0:
+                      # compute GAN evaluation stats
+                      g_images = generate_samples(sess, gan)
+                      stats = compute_evaluation_stats(g_images, test_images)
+                      print {k:v for k,v in stats.iteritems()}
+                      f_summary = lambda txt,v: tf.Summary(value=[tf.Summary.Value(tag=txt, simple_value=v)])
+                      stats_tb = [f_summary(k,v) for k,v in stats.iteritems()]
+                      # stats_summary = tf.summary.merge(stats_tb)
+                      writer.add_summary(stats_tb[0], gstep)
 
                     #verbose printing
                     if config.verbose:

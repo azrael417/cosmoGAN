@@ -120,11 +120,13 @@ class dcgan(object):
         self.saver = tf.train.Saver(max_to_keep=8000)
 
 
-    def sampling_graph(self):
-        self.z = tf.placeholder(tf.float32, [None, self.z_dim], name='z')
+    def sampling_graph(self, n_samples=None):
+        self.z = tf.placeholder(tf.float32, [n_samples, self.z_dim], name='z')
 
-        with tf.variable_scope("sampling") as sampling_scope:
+        with tf.variable_scope("generator") as scope:
+            scope.reuse_variables()
             self.G = self.generator(self.z, is_training=False)
+
     
     def optimizer(self,learning_rate,LARS_eta=None,LARS_epsilon = 1.0/16384.0):
         #set up optimizers
