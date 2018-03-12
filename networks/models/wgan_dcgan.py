@@ -144,7 +144,7 @@ class dcgan(object):
             d_optim = d_optim.minimize(self.c_loss, var_list=self.d_vars, global_step=self.global_step)
             g_optim = g_optim.minimize(self.g_loss, var_list=self.g_vars)
             
-            return tf.group(d_optim, g_optim, name="all_optims")
+            return d_optim, g_optim
     
     
     def larc_optimizer(self, learning_rate, LARC_mode = "clip", LARC_eta = 0.002, LARC_epsilon = 1.0/16384.0):
@@ -206,7 +206,7 @@ class dcgan(object):
         d_optim = d_optim.apply_gradients(d_grads_and_vars, global_step=self.global_step)
         g_optim = g_optim.apply_gradients(g_grads_and_vars)
             
-        return tf.group(d_optim, g_optim, name="all_optims")
+        return d_optim, g_optim
 
 
     def generator(self, z, is_training):

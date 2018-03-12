@@ -122,8 +122,8 @@ def train_dcgan(datafiles, config):
         gan.sampling_graph()
         
         #use LARC
-        #update_op = gan.larc_optimizer(config.learning_rate)
-        update_op = gan.optimizer(config.learning_rate)
+        #d_update_op, g_update_op = gan.larc_optimizer(config.learning_rate)
+        d_update_op, g_update_op = gan.optimizer(config.learning_rate)
 
         #session config
         sess_config=tf.ConfigProto(inter_op_parallelism_threads=config.num_inter_threads,
@@ -170,6 +170,8 @@ def train_dcgan(datafiles, config):
 
             while not sess.should_stop():           
                 try:
+                  #discriminator update
+                  
                     _, g_sum, c_sum = sess.run([update_op, gan.g_summary, gan.c_summary], feed_dict={handle: trn_handle})
                     gstep = sess.run(gan.global_step)
 
