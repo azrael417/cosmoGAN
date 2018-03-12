@@ -172,10 +172,11 @@ def train_dcgan(datafiles, config):
                 try:
                     #critic update
                     _, c_sum = sess.run([d_update_op, gan.c_summary], feed_dict={handle: trn_handle})
-                    #generator update
-                    _, g_sum = sess.run([g_update_op, gan.g_summary], feed_dict={handle: trn_handle})
                     #query global step
                     gstep = sess.run(gan.global_step)
+                    #generator update if requested
+                    if gstep%config.n_up == 0:
+                      _, g_sum = sess.run([g_update_op, gan.g_summary], feed_dict={handle: trn_handle})
 
                     writer.add_summary(g_sum, gstep)
                     writer.add_summary(c_sum, gstep)
