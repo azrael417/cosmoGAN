@@ -6,6 +6,7 @@ import wgan_dcgan as dcgan
 import horovod.tensorflow as hvd
 from utils import save_checkpoint, load_checkpoint
 from scipy import stats
+import matplotlib.pyplot as plt
 
 
 def sample_tfrecords_to_numpy(tfrecords_filenames, img_size, n_samples=1000):
@@ -54,6 +55,35 @@ def compute_evaluation_stats(fake, test):
   return {"KS":stats.ks_2samp(test_hist, fake_hist)[1]}
 
 
+def plot_pixel_histograms(fake, test, dump_path="./", tag=""):
+  test_bins, test_hist, test_err = get_hist_bins(test, get_error=True)
+  fake_bins, fake_hist, fake_err = get_hist_bins(fake, get_error=True)
+  ks_test = stats.ks_2samp(test_hist, fake_hist)[1]
+
+  plt.figure(1, figsize=(7,6))
+  #plot test
+  plt.errorbar(test_bins, test_hist, yerr=test_err, fmt='--ks', \
+    label='Test', markersize=7)
+
+  # plot generated
+  fake_label = 'GAN-' + tag if tag is not None else "GAN"
+  plt.errorbar(fake_bins, fake_hist, yerr=fake_err, fmt='o', \
+               label=fake_label, linewidth=2, markersize=6);
+
+  plt.legend(loc="best", fontsize=10)
+  plt.yscale('log');
+  plt.xlabel('Pixel Intensity', fontsize=18);
+  plt.ylabel('Counts (arb. units)', fontsize=18);
+  plt.tick_params(axis='both', labelsize=15, length=5)
+  plt.tick_params(axis='both', which='minor', length=3)
+  plt.ylim(5e-10, 8*10**7)
+  plt.xlim(-0.3,1.1)
+  plt.title('Pixels distribution', fontsize=16);
+
+  plt.savefig('%s/%s_pixel_intensity.jpg'%(dump_path, tag),bbox_inches='tight', format='jpg')
+  plt.savefig('%s/%s_pixel_intensity.pdf'%(dump_path, tag),bbox_inches='tight', format='pdf')
+
+
 def generate_samples(sess, dcgan, n_batches=20):
     z_sample = np.random.normal(size=(dcgan.batch_size, dcgan.z_dim))
     samples = sess.run(dcgan.G, feed_dict={dcgan.z: z_sample})
@@ -72,7 +102,11 @@ def train_dcgan(datafiles, config):
 
     # load test data
     test_images = sample_tfrecords_to_numpy(tst_datafiles, config.output_size)
-    print test_images.shape
+    
+    # prepare plots dir
+    plots_dir = config.plots_dir + '/' + config.experiment
+    if not os.path.exists(plots_dir):
+      os.makedirs(plots_dir)
 
     training_graph = tf.Graph()
 
@@ -180,15 +214,21 @@ def train_dcgan(datafiles, config):
                       _, g_sum = sess.run([g_update_op, gan.g_summary], feed_dict={handle: trn_handle})
                       writer.add_summary(g_sum, gstep)
 
-                    if gstep%300 == 0:
+                    if gstep%1 == 0:
                       # compute GAN evaluation stats
                       g_images = generate_samples(sess, gan)
                       stats = compute_evaluation_stats(g_images, test_images)
                       print {k:v for k,v in stats.iteritems()}
-                      f_summary = lambda txt,v: tf.Summary(value=[tf.Summary.Value(tag=txt, simple_value=v)])
-                      stats_tb = [f_summary(k,v) for k,v in stats.iteritems()]
+                      KS_summary = sess.run(gan.KS_summary, 
+                        feed_dict={gan.KS:stats['KS']})
+                      writer.add_summary(KS_summary, gstep)
+                      # f_summary = lambda txt,v: tf.Summary(value=[tf.Summary.Value(tag=txt, simple_value=v)])
+                      # stats_tb = [f_summary(k,v) for k,v in stats.iteritems()]
                       # stats_summary = tf.summary.merge(stats_tb)
-                      writer.add_summary(stats_tb[0], gstep)
+                      # writer.add_summary(stats_tb[0], gstep)
+
+                      # dump evaluation histogram plot for pixel intensity
+                      plot_pixel_histograms(g_images, test_images, dump_path=plots_dir, tag="step%d_epoch%d" % (gstep, gstep/num_batches))
 
                     #verbose printing
                     if config.verbose:
