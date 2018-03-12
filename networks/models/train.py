@@ -67,7 +67,7 @@ def generate_samples(sess, dcgan, n_batches=20):
 
 def train_dcgan(datafiles, config):
     trn_datafiles, tst_datafiles = datafiles
-    num_batches = config.num_records_total // config.batch_size
+    num_batches = config.num_records_total // ( config.batch_size * hvd.size() )
     num_steps = config.epoch*num_batches
 
     # load test data
@@ -92,13 +92,15 @@ def train_dcgan(datafiles, config):
              
         filenames = tf.placeholder(tf.string, shape=[None])
         dataset = tf.data.TFRecordDataset(filenames)
+        if hvd.size() > 1:
+            dataset = dataset.shard(hvd.size(), hvd.rank())
+        dataset = dataset.shuffle(config.batch_size*10)
         dataset = dataset.map(lambda x: decode_record(x))  # Parse the record into tensors.
         dataset = dataset.repeat(config.epoch)  # Repeat the input indefinitely.
         dataset = dataset.batch(config.batch_size)
         handle = tf.placeholder(tf.string,shape=[],name="iterator-placeholder")
         # iterator = dataset.make_initializable_iterator()
-        iterator = tf.data.Iterator.from_string_handle(handle, 
-          dataset.output_types, dataset.output_shapes)
+        iterator = tf.data.Iterator.from_string_handle(handle, dataset.output_types, dataset.output_shapes)
         next_element = iterator.get_next()
         #train iterator
         trn_iterator = dataset.make_initializable_iterator()
@@ -118,7 +120,10 @@ def train_dcgan(datafiles, config):
 
         gan.training_graph(next_element)
         gan.sampling_graph()
-        update_op = gan.optimizer(config.learning_rate, config.LARS_eta)
+        
+        #use LARC
+        d_update_op, g_update_op = gan.larc_optimizer(config.learning_rate)
+        #d_update_op, g_update_op = gan.optimizer(config.learning_rate)
 
         #session config
         sess_config=tf.ConfigProto(inter_op_parallelism_threads=config.num_inter_threads,
@@ -145,6 +150,8 @@ def train_dcgan(datafiles, config):
         init_op = tf.global_variables_initializer()
         init_local_op = tf.local_variables_initializer()
  
+        if hvd.rank() == 0:
+            print("Starting session with {} inter- and {} intra-threads".format(config.num_inter_threads, config.num_intra_threads))
         with tf.train.MonitoredTrainingSession(config=sess_config, hooks=hooks) as sess:
             writer = tf.summary.FileWriter('./logs/'+config.experiment+'/train', sess.graph)
 
@@ -163,11 +170,15 @@ def train_dcgan(datafiles, config):
 
             while not sess.should_stop():           
                 try:
-                    _, g_sum, c_sum = sess.run([update_op, gan.g_summary, gan.c_summary], feed_dict={handle: trn_handle})
+                    #critic update
+                    _, c_sum = sess.run([d_update_op, gan.c_summary], feed_dict={handle: trn_handle})
+                    #query global step
                     gstep = sess.run(gan.global_step)
-
-                    writer.add_summary(g_sum, gstep)
                     writer.add_summary(c_sum, gstep)
+                    #generator update if requested
+                    if gstep%config.num_updates == 0:
+                      _, g_sum = sess.run([g_update_op, gan.g_summary], feed_dict={handle: trn_handle})
+                      writer.add_summary(g_sum, gstep)
 
                     if gstep%300 == 0:
                       # compute GAN evaluation stats
