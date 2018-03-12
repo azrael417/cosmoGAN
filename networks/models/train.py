@@ -185,10 +185,10 @@ def train_dcgan(datafiles, config):
                       g_images = generate_samples(sess, gan)
                       stats = compute_evaluation_stats(g_images, test_images)
                       print {k:v for k,v in stats.iteritems()}
-                      f_summary = lambda txt,v: tf.Summary(value=[tf.Summary.Value(tag=txt, simple_value=v)])
-                      stats_tb = [f_summary(k,v) for k,v in stats.iteritems()]
-                      # stats_summary = tf.summary.merge(stats_tb)
-                      writer.add_summary(stats_tb[0], gstep)
+                      #f_summary = lambda txt,v: tf.Summary(value=[tf.Summary.Value(tag=txt, simple_value=v)])
+                      #stats_tb = [f_summary(k,v) for k,v in stats.iteritems()]
+                      #stats_summary = tf.summary.merge(stats_tb)
+                      #writer.add_summary(stats_tb[0], gstep)
 
                     #verbose printing
                     if config.verbose:
@@ -205,9 +205,10 @@ def train_dcgan(datafiles, config):
                       epoch = sess.run(gan.increment_epoch)
                       g_images = generate_samples(sess, gan)
                       stats = compute_evaluation_stats(g_images, test_images)
-                      stats_tb = [tf.summary.scalar(k,v) for k,v in stats.iteritems()]
-                      stats_summary = tf.summary.merge(stats_tb)
-                      writer.add_summary(stats_summary, gstep)
+                      print {k:v for k,v in stats.iteritems()}
+                      #stats_tb = [tf.summary.scalar(k,v) for k,v in stats.iteritems()]
+                      #stats_summary = tf.summary.merge(stats_tb)
+                      #writer.add_summary(stats_summary, gstep)
          
                                
                 except tf.errors.OutOfRangeError:
