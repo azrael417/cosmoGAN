@@ -169,7 +169,7 @@ def train_dcgan(datafiles, config):
                     writer.add_summary(g_sum, gstep)
                     writer.add_summary(c_sum, gstep)
 
-                    if gstep%100 == 0:
+                    if gstep%300 == 0:
                       # compute GAN evaluation stats
                       g_images = generate_samples(sess, gan)
                       stats = compute_evaluation_stats(g_images, test_images)
@@ -192,11 +192,6 @@ def train_dcgan(datafiles, config):
                     # increment epoch counter
                     if gstep%num_batches == 0:
                       epoch = sess.run(gan.increment_epoch)
-                      g_images = generate_images(sess, gan)
-                      stats = compute_evaluation_stats(g_images, test_images)
-                      stats_tb = [tf.summary.scalar(k,v) for k,v in stats.iteritems()]
-                      stats_summary = tf.summary.merge(stats_tb)
-                      writer.add_summary(stats_summary, gstep)
          
                                
                 except tf.errors.OutOfRangeError:

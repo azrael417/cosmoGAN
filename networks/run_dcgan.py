@@ -21,7 +21,7 @@ data_format = 'NHWC'
 transpose_matmul_b = False
 verbose = 'True'
 
-experiment = 'cosmo-new_%i_batchSize%i_'\
+experiment = 'cosmo-new_LARS_%i_batchSize%i_'\
              'nd%i_ng%i_gfdim%i_dfdim%i_zdim%i'%(output_size, batch_size, nd_layers, ng_layers, gf_dim, df_dim, z_dim)
 
 command = 'python -m models.main --dataset cosmo --datapath %s '\
