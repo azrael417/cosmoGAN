@@ -175,7 +175,7 @@ def train_dcgan(datafiles, config):
                     #query global step
                     gstep = sess.run(gan.global_step)
                     #generator update if requested
-                    if gstep%config.n_up == 0:
+                    if gstep%config.num_updates == 0:
                       _, g_sum = sess.run([g_update_op, gan.g_summary], feed_dict={handle: trn_handle})
 
                     writer.add_summary(g_sum, gstep)
