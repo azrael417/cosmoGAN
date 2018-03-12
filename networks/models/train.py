@@ -174,12 +174,11 @@ def train_dcgan(datafiles, config):
                     _, c_sum = sess.run([d_update_op, gan.c_summary], feed_dict={handle: trn_handle})
                     #query global step
                     gstep = sess.run(gan.global_step)
+                    writer.add_summary(c_sum, gstep)
                     #generator update if requested
                     if gstep%config.num_updates == 0:
                       _, g_sum = sess.run([g_update_op, gan.g_summary], feed_dict={handle: trn_handle})
-
-                    writer.add_summary(g_sum, gstep)
-                    writer.add_summary(c_sum, gstep)
+                      writer.add_summary(g_sum, gstep)
 
                     if gstep%100 == 0:
                       # compute GAN evaluation stats
