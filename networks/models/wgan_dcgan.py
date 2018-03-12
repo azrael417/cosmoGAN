@@ -131,7 +131,7 @@ class dcgan(object):
         
         self.KS = tf.placeholder(tf.float32, (), name='statistics/KS')
         with tf.variable_scope("statistics") as scope:
-            self.KS_summary = tf.summary.merge([tf.summary.scalar("KS", self.KS)])
+            self.KS_summary = tf.summary.merge([tf.summary.scalar("statistics/KS", self.KS)])
  
 
     def optimizer(self, learning_rate):

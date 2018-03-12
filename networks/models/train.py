@@ -60,7 +60,7 @@ def plot_pixel_histograms(fake, test, dump_path="./", tag=""):
   fake_bins, fake_hist, fake_err = get_hist_bins(fake, get_error=True)
   ks_test = stats.ks_2samp(test_hist, fake_hist)[1]
 
-  plt.figure(1, figsize=(7,6))
+  plt.figure(figsize=(7,6))
   #plot test
   plt.errorbar(test_bins, test_hist, yerr=test_err, fmt='--ks', \
     label='Test', markersize=7)
@@ -76,12 +76,17 @@ def plot_pixel_histograms(fake, test, dump_path="./", tag=""):
   plt.ylabel('Counts (arb. units)', fontsize=18);
   plt.tick_params(axis='both', labelsize=15, length=5)
   plt.tick_params(axis='both', which='minor', length=3)
-  plt.ylim(5e-10, 8*10**7)
-  plt.xlim(-0.3,1.1)
-  plt.title('Pixels distribution', fontsize=16);
+  # plt.ylim(5e-10, 8*10**7)
+  # plt.xlim(-0.3,1.1)
+  plt.title('Pixels distribution (KS=%2.3f)'%ks_test, fontsize=16);
 
-  plt.savefig('%s/%s_pixel_intensity.jpg'%(dump_path, tag),bbox_inches='tight', format='jpg')
-  plt.savefig('%s/%s_pixel_intensity.pdf'%(dump_path, tag),bbox_inches='tight', format='pdf')
+  plots_dir = "%s/%s" % (dump_path, tag)
+  if not os.path.exists(plots_dir):
+    os.makedirs(plots_dir)
+
+  plt.savefig('%s/pixel_intensity.jpg'%plots_dir,bbox_inches='tight', format='jpg')
+  plt.savefig('%s/pixel_intensity.pdf'%plots_dir,bbox_inches='tight', format='pdf')
+  plt.close()
 
 
 def generate_samples(sess, dcgan, n_batches=20):
@@ -156,8 +161,8 @@ def train_dcgan(datafiles, config):
         gan.sampling_graph()
         
         #use LARC
-        d_update_op, g_update_op = gan.larc_optimizer(config.learning_rate)
-        #d_update_op, g_update_op = gan.optimizer(config.learning_rate)
+        #d_update_op, g_update_op = gan.larc_optimizer(config.learning_rate)
+        d_update_op, g_update_op = gan.optimizer(config.learning_rate)
 
         #session config
         sess_config=tf.ConfigProto(inter_op_parallelism_threads=config.num_inter_threads,
@@ -214,7 +219,7 @@ def train_dcgan(datafiles, config):
                       _, g_sum = sess.run([g_update_op, gan.g_summary], feed_dict={handle: trn_handle})
                       writer.add_summary(g_sum, gstep)
 
-                    if gstep%1 == 0:
+                    if gstep%200 == 0:
                       # compute GAN evaluation stats
                       g_images = generate_samples(sess, gan)
                       stats = compute_evaluation_stats(g_images, test_images)
