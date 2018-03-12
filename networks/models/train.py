@@ -67,7 +67,7 @@ def generate_samples(sess, dcgan, n_batches=20):
 
 def train_dcgan(datafiles, config):
     trn_datafiles, tst_datafiles = datafiles
-    num_batches = config.num_records_total // config.batch_size
+    num_batches = config.num_records_total // ( config.batch_size * hvd.size() )
     num_steps = config.epoch*num_batches
 
     # load test data
@@ -122,8 +122,8 @@ def train_dcgan(datafiles, config):
         gan.sampling_graph()
         
         #use LARC
-        #d_update_op, g_update_op = gan.larc_optimizer(config.learning_rate)
-        d_update_op, g_update_op = gan.optimizer(config.learning_rate)
+        d_update_op, g_update_op = gan.larc_optimizer(config.learning_rate)
+        #d_update_op, g_update_op = gan.optimizer(config.learning_rate)
 
         #session config
         sess_config=tf.ConfigProto(inter_op_parallelism_threads=config.num_inter_threads,
