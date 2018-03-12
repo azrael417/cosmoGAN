@@ -170,9 +170,11 @@ def train_dcgan(datafiles, config):
 
             while not sess.should_stop():           
                 try:
-                  #discriminator update
-                  
-                    _, g_sum, c_sum = sess.run([update_op, gan.g_summary, gan.c_summary], feed_dict={handle: trn_handle})
+                    #critic update
+                    _, c_sum = sess.run([d_update_op, gan.c_summary], feed_dict={handle: trn_handle})
+                    #generator update
+                    _, g_sum = sess.run([g_update_op, gan.g_summary], feed_dict={handle: trn_handle})
+                    #query global step
                     gstep = sess.run(gan.global_step)
 
                     writer.add_summary(g_sum, gstep)

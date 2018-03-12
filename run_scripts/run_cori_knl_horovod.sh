@@ -12,4 +12,4 @@ export PYTHONPATH=$(pwd)/../networks:${PYTHONPATH}:/global/homes/t/tkurth/.conda
 export OMP_NUM_THREADS=66
 
 #run training
-srun -l -N ${SLURM_NNODES} -n ${SLURM_NNODES} -c 272 python ../networks/run_dcgan.py
+srun -N ${SLURM_NNODES} -n ${SLURM_NNODES} -c 272 python ../networks/run_dcgan.py

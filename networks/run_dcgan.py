@@ -31,7 +31,7 @@ command = 'python -u -m models.main --dataset cosmo --datapath %s '\
           '--num_inter_threads %i --num_intra_threads %i'%(datapath, output_size, c_dim, experiment,\
                                                                    epoch, batch_size, z_dim,\
                                                                    nd_layers, ng_layers, gf_dim, df_dim, save_every_step,\
-                                                                   data_format, transpose_matmul_b, verbose, 1, 2)
+                                                                   data_format, transpose_matmul_b, verbose, 1, 1)
 
 if not os.path.isdir('output'):
     os.mkdir('output')
