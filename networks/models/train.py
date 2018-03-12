@@ -202,16 +202,7 @@ def train_dcgan(datafiles, config):
 
                     # increment epoch counter
                     if gstep%num_batches == 0:
-                      epoch = sess.run(gan.increment_epoch)
-<<<<<<< HEAD
-=======
-                      g_images = generate_samples(sess, gan)
-                      stats = compute_evaluation_stats(g_images, test_images)
-                      stats_tb = [tf.summary.scalar(k,v) for k,v in stats.iteritems()]
-                      stats_summary = tf.summary.merge(stats_tb)
-                      writer.add_summary(stats_summary, gstep)
->>>>>>> ac93247924602685362bfe48458186affd5212f1
-         
+                      epoch = sess.run(gan.increment_epoch)         
                                
                 except tf.errors.OutOfRangeError:
                     break
