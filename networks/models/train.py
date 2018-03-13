@@ -6,10 +6,12 @@ import wgan_dcgan as dcgan
 import horovod.tensorflow as hvd
 from utils import save_checkpoint, load_checkpoint
 from scipy import stats
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 
-def sample_tfrecords_to_numpy(tfrecords_filenames, img_size, n_samples=1000):
+def sample_tfrecords_to_numpy(tfrecords_filenames, img_size, n_samples=1000, normalize=False):
 
   def decode_record(x):
     parsed_example = tf.parse_single_example(x,
@@ -36,6 +38,10 @@ def sample_tfrecords_to_numpy(tfrecords_filenames, img_size, n_samples=1000):
               feed_dict={filenames: tfrecords_filenames})
       images = sess.run(next_element)
       sess.close()
+
+  if normalize:
+    images = -1+ 2 * (images - images.min()) / (images.max() - images.min())
+
   return images
         
 
@@ -60,20 +66,20 @@ def plot_pixel_histograms(fake, test, dump_path="./", tag=""):
   fake_bins, fake_hist, fake_err = get_hist_bins(fake, get_error=True)
   ks_test = stats.ks_2samp(test_hist, fake_hist)[1]
 
-  plt.figure(figsize=(7,6))
+  fig, ax = plt.subplots(figsize=(7,6))
   #plot test
-  plt.errorbar(test_bins, test_hist, yerr=test_err, fmt='--ks', \
-    label='Test', markersize=7)
+  ax.errorbar(test_bins, test_hist, yerr=test_err, fmt='--ks', \
+  label='Test', markersize=7)
 
   # plot generated
   fake_label = 'GAN-' + tag if tag is not None else "GAN"
-  plt.errorbar(fake_bins, fake_hist, yerr=fake_err, fmt='o', \
-               label=fake_label, linewidth=2, markersize=6);
+  ax.errorbar(fake_bins, fake_hist, yerr=fake_err, fmt='o', \
+             label=fake_label, linewidth=2, markersize=6);
 
-  plt.legend(loc="best", fontsize=10)
-  plt.yscale('log');
-  plt.xlabel('Pixel Intensity', fontsize=18);
-  plt.ylabel('Counts (arb. units)', fontsize=18);
+  ax.legend(loc="best", fontsize=10)
+  ax.set_yscale('log');
+  ax.set_xlabel('Pixel Intensity', fontsize=18);
+  ax.set_ylabel('Counts (arb. units)', fontsize=18);
   plt.tick_params(axis='both', labelsize=15, length=5)
   plt.tick_params(axis='both', which='minor', length=3)
   # plt.ylim(5e-10, 8*10**7)
@@ -82,11 +88,10 @@ def plot_pixel_histograms(fake, test, dump_path="./", tag=""):
 
   plots_dir = "%s/%s" % (dump_path, tag)
   if not os.path.exists(plots_dir):
-    os.makedirs(plots_dir)
+      os.makedirs(plots_dir)
 
   plt.savefig('%s/pixel_intensity.jpg'%plots_dir,bbox_inches='tight', format='jpg')
   plt.savefig('%s/pixel_intensity.pdf'%plots_dir,bbox_inches='tight', format='pdf')
-  plt.close()
 
 
 def generate_samples(sess, dcgan, n_batches=20):
@@ -106,7 +111,7 @@ def train_dcgan(datafiles, config):
     num_steps = config.epoch*num_batches
 
     # load test data
-    test_images = sample_tfrecords_to_numpy(tst_datafiles, config.output_size)
+    test_images = sample_tfrecords_to_numpy(tst_datafiles, config.output_size, normalize=config.normalize_batch)
     
     # prepare plots dir
     plots_dir = config.plots_dir + '/' + config.experiment
@@ -118,7 +123,7 @@ def train_dcgan(datafiles, config):
     with training_graph.as_default():
 
         # set up data ingestion pipeline
-        def decode_record(x):
+        def decode_record(x, normalize=config.normalize_batch):
             parsed_example = tf.parse_single_example(x,
                 features = {
                     "data_raw": tf.FixedLenFeature([],tf.string)
@@ -127,6 +132,10 @@ def train_dcgan(datafiles, config):
             example = tf.decode_raw(parsed_example['data_raw'],tf.float32)
             example = tf.reshape(example,
               [config.output_size, config.output_size, config.c_dim])
+            if normalize:
+              pix_min = tf.reduce_min(example)
+              pix_max = tf.reduce_max(example)
+              example = -1+2*(example-pix_min) / (pix_max-pix_min)
             return example
              
         filenames = tf.placeholder(tf.string, shape=[None])

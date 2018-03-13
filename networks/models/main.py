@@ -20,6 +20,7 @@ flags.DEFINE_integer("nd_layers", 4, "Number of discriminator convolutional laye
 flags.DEFINE_integer("ng_layers", 4, "Number of generator conv_T layers. [4]")
 flags.DEFINE_integer("gf_dim", 64, "Dimension of gen filters in last conv layer. [64]")
 flags.DEFINE_integer("df_dim", 64, "Dimension of discrim filters in first conv layer. [64]")
+flags.DEFINE_boolean("normalize_batch", True, "The size of batch images [64]")
 flags.DEFINE_integer("batch_size", 64, "The size of batch images [64]")
 flags.DEFINE_integer("num_updates", 5, "Number of critic updates per generator update [5]")
 flags.DEFINE_integer("output_size", 64, "The size of the output images to produce [64]")
@@ -36,7 +37,7 @@ flags.DEFINE_integer("num_intra_threads", 4, "number of threads per task [4]")
 
 config = flags.FLAGS
 
-def get_data_files(n_records=None):
+def get_data_files(compute_stat=True):
     train_data_files = glob.glob(config.datapath + "/*train*.tfrecords")
     valid_data_files = glob.glob(config.datapath + "/*test*.tfrecords")
 
@@ -45,13 +46,12 @@ def get_data_files(n_records=None):
     if os.path.isfile(statsfile):
         f = np.load(statsfile)
         n_records = int(f["nrecords"])
-
-    if n_records is None:
-        n_records = 0
+    else:
+        n_records = 0; 
         for fn in train_data_files:
             for record in tf.python_io.tf_record_iterator(fn):
                 n_records += 1
-                print "# records =", n_records
+    print "# records =", n_records
     
     return train_data_files, valid_data_files, n_records
 
