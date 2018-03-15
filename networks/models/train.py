@@ -11,7 +11,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 
-def sample_tfrecords_to_numpy(tfrecords_filenames, img_size, n_samples=1000, normalize=False):
+def sample_tfrecords_to_numpy(tfrecords_filenames, img_size, n_samples=1000, normalize=None):
 
   def decode_record(x):
     parsed_example = tf.parse_single_example(x,
@@ -39,8 +39,9 @@ def sample_tfrecords_to_numpy(tfrecords_filenames, img_size, n_samples=1000, nor
       images = sess.run(next_element)
       sess.close()
 
-  if normalize:
-    images = -1+ 2 * (images - images.min()) / (images.max() - images.min())
+  if normalize is not None:
+    pix_min, pix_max = normalize
+    images = -1+ 2 * (images - pix_min) / (pix_max - pix_min)
 
   return images
         
@@ -111,7 +112,7 @@ def train_dcgan(datafiles, config):
     num_steps = config.epoch*num_batches
 
     # load test data
-    test_images = sample_tfrecords_to_numpy(tst_datafiles, config.output_size, normalize=config.normalize_batch)
+    test_images = sample_tfrecords_to_numpy(tst_datafiles, config.output_size, normalize=(config.pix_min, config.pix_max))
     
     # prepare plots dir
     plots_dir = config.plots_dir + '/' + config.experiment
@@ -135,7 +136,7 @@ def train_dcgan(datafiles, config):
             if normalize:
               pix_min = tf.reduce_min(example)
               pix_max = tf.reduce_max(example)
-              example = -1+2*(example-pix_min) / (pix_max-pix_min)
+              example = -1+2*(example-config.pix_min) / (config.pix_max-config.pix_min)
             return example
              
         filenames = tf.placeholder(tf.string, shape=[None])
@@ -236,10 +237,6 @@ def train_dcgan(datafiles, config):
                       KS_summary = sess.run(gan.KS_summary, 
                         feed_dict={gan.KS:stats['KS']})
                       writer.add_summary(KS_summary, gstep)
-                      # f_summary = lambda txt,v: tf.Summary(value=[tf.Summary.Value(tag=txt, simple_value=v)])
-                      # stats_tb = [f_summary(k,v) for k,v in stats.iteritems()]
-                      # stats_summary = tf.summary.merge(stats_tb)
-                      # writer.add_summary(stats_tb[0], gstep)
 
                       # dump evaluation histogram plot for pixel intensity
                       plot_pixel_histograms(g_images, test_images, dump_path=plots_dir, tag="step%d_epoch%d" % (gstep, gstep/num_batches))

@@ -46,14 +46,21 @@ def get_data_files(compute_stat=True):
     if os.path.isfile(statsfile):
         f = np.load(statsfile)
         n_records = int(f["nrecords"])
+        pix_min = f['min']
+        pix_max = f['max']
     else:
-        n_records = 0; 
+        n_records = 0
+        pix_min = np.inf
+        pix_max = -np.inf
         for fn in train_data_files:
             for record in tf.python_io.tf_record_iterator(fn):
                 n_records += 1
-    print "# records =", n_records
+        np.savez(statsfile, 
+            {"min":pix_min, "max":pix_max, "nrecords":n_records})
+
+    print "# records = %d; min = %2.3f; max = %2.3f"%(n_records, pix_min, pix_max)
     
-    return train_data_files, valid_data_files, n_records
+    return train_data_files, valid_data_files, n_records, pix_min, pix_max
 
 
 def main(_):
@@ -63,12 +70,14 @@ def main(_):
 
     if hvd.rank() == 0:
         print("Loading data")
-    trn_datafiles, tst_datafiles, n_records = get_data_files()
+    trn_datafiles, tst_datafiles, n_records, pix_min, pix_max=get_data_files()
     if hvd.rank() == 0:
         print("done.")
         
     if not config.num_records_total:
         config.num_records_total = n_records
+        config.pix_min = pix_min
+        config.pix_max = pix_max
     pprint.PrettyPrinter().pprint(config.__flags)
     train.train_dcgan((trn_datafiles, tst_datafiles), config)
 
