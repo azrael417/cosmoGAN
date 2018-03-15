@@ -121,9 +121,15 @@ def train_dcgan(datafiles, config):
         gan.training_graph(next_element)
         gan.sampling_graph()
         
-        #use LARC
-        d_update_op, g_update_op = gan.larc_optimizer(config.learning_rate)
-        #d_update_op, g_update_op = gan.optimizer(config.learning_rate)
+        #determine which optimizer we are going to use
+        if config.use_larc:
+          if hvd.rank() == 0:
+            print("Using LARC optimizer")
+          d_update_op, g_update_op = gan.larc_optimizer(config.learning_rate)
+        else:
+          if hvd.rank() == 0:
+            print("Disabling LARC optimizer")
+          d_update_op, g_update_op = gan.optimizer(config.learning_rate)
 
         #session config
         sess_config=tf.ConfigProto(inter_op_parallelism_threads=config.num_inter_threads,
