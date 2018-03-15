@@ -3,12 +3,12 @@ import subprocess
 import shlex
 
 # datapath = '/global/cscratch1/sd/tkurth/gb2018/cosmoGAN/tfrecord/256'
-datapath = '/data1/adalbert/Maps10/tfrecords/256/'
-output_size = 256
+datapath = '/data1/adalbert/Maps10/tfrecords/512/'
+output_size = 512
 n_up = 5
 c_dim = 1
 epoch = 50
-batch_size = 64
+batch_size = 16
 z_dim = 64
 nd_layers = 4
 ng_layers = 4
