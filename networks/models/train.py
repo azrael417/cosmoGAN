@@ -8,6 +8,9 @@ from utils import save_checkpoint, load_checkpoint
 import matplotlib
 matplotlib.use('Agg')
 
+from scipy import stats
+
+
 class decoder(object):
   
   def __init__(self, output_shape, normalization=None):
