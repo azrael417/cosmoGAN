@@ -8,8 +8,96 @@ from utils import save_checkpoint, load_checkpoint
 import matplotlib
 matplotlib.use('Agg')
 
-from validation import *
+class decoder(object):
+  
+  def __init__(self, output_shape, normalization=None):
+    self.output_shape = output_shape
+    if normalization:
+      self.minval, self.maxval = normalization
+    else:
+      self.minval, self.maxval = (0.,1.)
+      
+      
+  def decode(self, x):
+    parsed_example = tf.parse_single_example(x,
+                                             features = {
+                                               "data_raw": tf.FixedLenFeature([],tf.string)
+                                             })
 
+    example = tf.decode_raw(parsed_example['data_raw'],tf.float32)
+    example = 2* (tf.reshape(example,self.output_shape) - self.minval) / (self.maxval - self.minval) -1.
+    return example
+
+
+def sample_tfrecords_to_numpy(tfrecords_filenames, img_size, n_samples=1000, normalization=None):
+
+    #init decoder
+    dec = decoder((img_size, img_size), normalization=normalization)
+
+    filenames = tf.placeholder(tf.string, shape=[None])
+    dataset = tf.data.TFRecordDataset(filenames)
+    dataset = dataset.map(lambda x: dec.decode(x))  # Parse the record into tensors.
+    dataset = dataset.repeat(1)  # Repeat the input indefinitely.
+    dataset = dataset.batch(n_samples)
+    iterator = dataset.make_initializable_iterator()
+    next_element = iterator.get_next()
+
+    # Initialize `iterator` with training data.
+    with tf.Session() as sess:
+      sess.run(iterator.initializer, 
+              feed_dict={filenames: tfrecords_filenames})
+      images = sess.run(next_element)
+      sess.close()
+      
+    return images
+
+def get_hist_bins(data, get_error=False):
+    y, x = np.histogram(data, bins=60, range=(-1.1,1.1))
+    x = 0.5*(x[1:]+x[:-1])
+    if get_error == True:
+        y_err = np.sqrt(y)
+        return x, y, y_err
+    else:
+        return x, y
+
+
+def compute_evaluation_stats(fake, test):
+  test_bins, test_hist = get_hist_bins(test)
+  fake_bins, fake_hist = get_hist_bins(fake)
+  return {"KS":stats.ks_2samp(test_hist, fake_hist)[1]}
+
+
+def plot_pixel_histograms(fake, test, dump_path="./", tag=""):
+  test_bins, test_hist, test_err = get_hist_bins(test, get_error=True)
+  fake_bins, fake_hist, fake_err = get_hist_bins(fake, get_error=True)
+  ks_test = stats.ks_2samp(test_hist, fake_hist)[1]
+
+  fig, ax = plt.subplots(figsize=(7,6))
+  #plot test
+  ax.errorbar(test_bins, test_hist, yerr=test_err, fmt='--ks', \
+  label='Test', markersize=7)
+
+  # plot generated
+  fake_label = 'GAN-' + tag if tag is not None else "GAN"
+  ax.errorbar(fake_bins, fake_hist, yerr=fake_err, fmt='o', \
+             label=fake_label, linewidth=2, markersize=6);
+
+  ax.legend(loc="best", fontsize=10)
+  ax.set_yscale('log');
+  ax.set_xlabel('Pixel Intensity', fontsize=18);
+  ax.set_ylabel('Counts (arb. units)', fontsize=18);
+  plt.tick_params(axis='both', labelsize=15, length=5)
+  plt.tick_params(axis='both', which='minor', length=3)
+  # plt.ylim(5e-10, 8*10**7)
+  # plt.xlim(-0.3,1.1)
+  plt.title('Pixels distribution (KS=%2.3f)'%ks_test, fontsize=16);
+
+  plots_dir = "%s/%s" % (dump_path, tag)
+  if not os.path.exists(plots_dir):
+      os.makedirs(plots_dir)
+
+  plt.savefig('%s/pixel_intensity.jpg'%plots_dir,bbox_inches='tight', format='jpg')
+  plt.savefig('%s/pixel_intensity.pdf'%plots_dir,bbox_inches='tight', format='pdf')
 
 def generate_samples(sess, dcgan, n_batches=20):
     z_sample = np.random.normal(size=(dcgan.batch_size, dcgan.z_dim))
@@ -28,7 +116,7 @@ def train_dcgan(datafiles, config):
     num_steps = config.epoch*num_batches
 
     # load test data
-    test_images = sample_tfrecords_to_numpy(tst_datafiles, config.output_size, normalize=(config.pix_min, config.pix_max))
+    test_images = sample_tfrecords_to_numpy(tst_datafiles, config.output_size, normalization=(config.pix_min, config.pix_max))
     
     # prepare plots dir
     plots_dir = config.plots_dir + '/' + config.experiment
@@ -39,28 +127,14 @@ def train_dcgan(datafiles, config):
 
     with training_graph.as_default():
 
-        # set up data ingestion pipeline
-        def decode_record(x, normalize=config.normalize_batch):
-            parsed_example = tf.parse_single_example(x,
-                features = {
-                    "data_raw": tf.FixedLenFeature([],tf.string)
-                }
-            )
-            example = tf.decode_raw(parsed_example['data_raw'],tf.float32)
-            example = tf.reshape(example,
-              [config.output_size, config.output_size, config.c_dim])
-            if normalize:
-              pix_min = tf.reduce_min(example)
-              pix_max = tf.reduce_max(example)
-              example = -1+2*(example-config.pix_min) / (config.pix_max-config.pix_min)
-            return example
-             
+        #setup input pipeline
+        dec = decoder(output_shape=[config.output_size, config.output_size, config.c_dim], normalization=(config.pix_min, config.pix_max))
         filenames = tf.placeholder(tf.string, shape=[None])
         dataset = tf.data.TFRecordDataset(filenames)
         if hvd.size() > 1:
             dataset = dataset.shard(hvd.size(), hvd.rank())
         dataset = dataset.shuffle(config.batch_size*10)
-        dataset = dataset.map(lambda x: decode_record(x))  # Parse the record into tensors.
+        dataset = dataset.map(lambda x: dec.decode(x))  # Parse the record into tensors.
         dataset = dataset.repeat(config.epoch)  # Repeat the input indefinitely.
         dataset = dataset.batch(config.batch_size)
         handle = tf.placeholder(tf.string,shape=[],name="iterator-placeholder")
@@ -86,9 +160,15 @@ def train_dcgan(datafiles, config):
         gan.training_graph(next_element)
         gan.sampling_graph()
         
-        #use LARC
-        #d_update_op, g_update_op = gan.larc_optimizer(config.learning_rate)
-        d_update_op, g_update_op = gan.optimizer(config.learning_rate)
+        #determine which optimizer we are going to use
+        if config.use_larc:
+          if hvd.rank() == 0:
+            print("Using LARC optimizer")
+          d_update_op, g_update_op = gan.larc_optimizer(config.learning_rate)
+        else:
+          if hvd.rank() == 0:
+            print("Disabling LARC optimizer")
+          d_update_op, g_update_op = gan.optimizer(config.learning_rate)
 
         #session config
         sess_config=tf.ConfigProto(inter_op_parallelism_threads=config.num_inter_threads,
@@ -149,13 +229,14 @@ def train_dcgan(datafiles, config):
                       # compute GAN evaluation stats
                       g_images = generate_samples(sess, gan)
                       stats = compute_evaluation_stats(g_images, test_images)
-                      print {k:v for k,v in stats.iteritems()}
-                      KS_summary = sess.run(gan.KS_summary, 
-                        feed_dict={gan.KS:stats['KS']})
-                      writer.add_summary(KS_summary, gstep)
+                      #KS summary
+                      KS_summary = sess.run(gan.KS_summary, feed_dict={gan.KS:stats['KS']})
 
-                      # dump evaluation histogram plot for pixel intensity
-                      plot_pixel_histograms(g_images, test_images, dump_path=plots_dir, tag="step%d_epoch%d" % (gstep, gstep/num_batches))
+                      if hvd.rank() == 0:
+                        print {k:v for k,v in stats.iteritems()}
+                        writer.add_summary(KS_summary, gstep)
+                        plot_pixel_histograms(g_images, test_images, dump_path=plots_dir, tag="step%d_epoch%d" % (gstep, gstep/num_batches))
+                      
 
                     #verbose printing
                     if config.verbose:
@@ -169,8 +250,11 @@ def train_dcgan(datafiles, config):
 
                     # increment epoch counter
                     if gstep%num_batches == 0:
-                      epoch = sess.run(gan.increment_epoch)         
+                      epoch = sess.run(gan.increment_epoch)
+                      g_images = generate_samples(sess, gan)
+                      stats = compute_evaluation_stats(g_images, test_images)
+                      if hvd.rank() == 0:
+                        print {k:v for k,v in stats.iteritems()}
                                
                 except tf.errors.OutOfRangeError:
                     break
-

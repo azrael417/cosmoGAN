@@ -12,6 +12,9 @@ flags.DEFINE_string("datapath", "data/tfrecords", "Path to input data files")
 flags.DEFINE_integer("num_records_total", None, "Number of total records. Inferred if not specified (can take time though).")
 flags.DEFINE_integer("epoch", 25, "Epoch to train [25]")
 flags.DEFINE_float("learning_rate", 0.0002, "Learning rate of for adam [0.0002]")
+flags.DEFINE_float("pix_min", 0.0, "Minimum pixel value for normalization [0.]")
+flags.DEFINE_float("pix_max", 1.0, "Maximum pixel value for normalization [1.]")
+flags.DEFINE_boolean("use_larc", False, "Decide whether to use LARC or not [False]")
 flags.DEFINE_float("LARC_eta", 0.002, "LARC eta-parameter [0.002]")
 flags.DEFINE_float("beta1", 0.5, "Momentum term of adam [0.5]")
 flags.DEFINE_float("flip_labels", 0, "Probability of flipping labels [0]")
@@ -76,8 +79,8 @@ def main(_):
         
     if not config.num_records_total:
         config.num_records_total = n_records
-        config.pix_min = pix_min
-        config.pix_max = pix_max
+    config.pix_min = pix_min
+    config.pix_max = pix_max
     pprint.PrettyPrinter().pprint(config.__flags)
     train.train_dcgan((trn_datafiles, tst_datafiles), config)
 

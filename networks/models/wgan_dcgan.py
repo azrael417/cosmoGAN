@@ -1,5 +1,8 @@
 import tensorflow as tf
 import horovod.tensorflow as hvd
+from tensorflow.python.ops import control_flow_ops
+from tensorflow.python.ops import math_ops
+from tensorflow.python.ops import linalg_ops
 from .ops import linear, conv2d, conv2d_transpose, lrelu
 import numpy as np
 
@@ -155,8 +158,8 @@ class dcgan(object):
     
     def larc_optimizer(self, learning_rate, LARC_mode = "clip", LARC_eta = 0.002, LARC_epsilon = 1.0/16384.0):
         #set up optimizers
-        d_optim = tf.train.RMSPropOptimizer(1.)
-        g_optim = tf.train.RMSPropOptimizer(1.)
+        d_optim = tf.train.RMSPropOptimizer(learning_rate)
+        g_optim = tf.train.RMSPropOptimizer(learning_rate)
         
         #horovod additions if distributed
         if self.distributed:
@@ -173,44 +176,60 @@ class dcgan(object):
             #discriminator
             for idx, (g, v) in enumerate(d_grads_and_vars):
                 if g is not None:
-                    v_norm = tf.norm(tensor=v, ord=2)
-                    g_norm = tf.norm(tensor=g, ord=2)
-                    larc_local_lr = tf.cond(
-                                          pred = tf.logical_and( tf.not_equal(v_norm, tf.constant(0.0)), tf.not_equal(g_norm, tf.constant(0.0)) ),
+                    if self.distributed:
+                        local_sum = tf.reduce_sum(tf.square(v))
+                        v_norm = tf.sqrt(hvd.allreduce(local_sum))
+                    else:
+                        v_norm = linalg_ops.norm(tensor=v, ord=2)
+                    g_norm = linalg_ops.norm(tensor=g, ord=2)
+                    larc_local_lr = control_flow_ops.cond(
+                                          pred = math_ops.logical_and( math_ops.not_equal(v_norm, tf.constant(0.0)), 
+                                                                       math_ops.not_equal(g_norm, tf.constant(0.0)) ),
                                           true_fn = lambda: LARC_eta * v_norm / g_norm,
                                           false_fn = lambda: LARC_epsilon)
                                           
                     #clip or scale
                     if LARC_mode == "scale":
-                        larc_local_lr = larc_local_lr * learning_rate
+                        effective_lr = larc_local_lr
                     else:
-                        larc_local_lr = tf.minimum(larc_local_lr, learning_rate)
+                        effective_lr = math_ops.minimum(larc_local_lr, 1.0)
                         
                     #multiply gradients
-                    d_grads_and_vars[idx] = (tf.scalar_mul(larc_local_lr, g), v)
+                    d_grads_and_vars[idx] = (math_ops.scalar_mul(effective_lr, g), v)
                     
             #generator:
             for idx, (g, v) in enumerate(g_grads_and_vars):
                 if g is not None:
-                    v_norm = tf.norm(tensor=v, ord=2)
-                    g_norm = tf.norm(tensor=g, ord=2)
-                    larc_local_lr = tf.cond(
-                                          pred = tf.logical_and( tf.not_equal(v_norm, tf.constant(0.0)), tf.not_equal(g_norm, tf.constant(0.0)) ),
+                    if self.distributed:
+                        local_sum = tf.reduce_sum(tf.square(v))
+                        v_norm = tf.sqrt(hvd.allreduce(local_sum))
+                    else:
+                        v_norm = linalg_ops.norm(tensor=v, ord=2)
+                    g_norm = linalg_ops.norm(tensor=g, ord=2)
+                    larc_local_lr = control_flow_ops.cond(
+                                          pred = math_ops.logical_and( math_ops.not_equal(v_norm, tf.constant(0.0)), 
+                                                                       math_ops.not_equal(g_norm, tf.constant(0.0)) ),
                                           true_fn = lambda: LARC_eta * v_norm / g_norm,
                                           false_fn = lambda: LARC_epsilon)
                     
                     #clip or scale
                     if LARC_mode == "scale":
-                        larc_local_lr = larc_local_lr * learning_rate
+                        effective_lr = larc_local_lr
                     else:
-                        larc_local_lr = tf.minimum(larc_local_lr, learning_rate)
+                        effective_lr = math_ops.minimum(larc_local_lr, 1.0)
                         
                     #multiply gradients
-                    g_grads_and_vars[idx] = (tf.scalar_mul(larc_local_lr, g), v)
+                    g_grads_and_vars[idx] = (math_ops.scalar_mul(effective_lr, g), v)
         
         #now tell the optimizers what to do
-        d_optim = d_optim.apply_gradients(d_grads_and_vars, global_step=self.global_step)
-        g_optim = g_optim.apply_gradients(g_grads_and_vars)
+        d_grad_updates = d_optim.apply_gradients(d_grads_and_vars, global_step=self.global_step)
+        g_grad_updates = g_optim.apply_gradients(g_grads_and_vars)
+
+        with tf.control_dependencies([self.c_loss]):
+            d_optim = d_grad_updates
+
+        with tf.control_dependencies([self.g_loss]):
+            g_optim = g_grad_updates
             
         return d_optim, g_optim
 
