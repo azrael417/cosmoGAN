@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import tensorflow as tf
 import os
 
-def sample_tfrecords_to_numpy(tfrecords_filenames, img_size, n_samples=1000, normalize=None):
+def sample_tfrecords_to_numpy(tfrecords_filenames, img_size, n_samples=1000, normalization=None):
 
   def decode_record(x):
     parsed_example = tf.parse_single_example(x,
@@ -32,8 +32,8 @@ def sample_tfrecords_to_numpy(tfrecords_filenames, img_size, n_samples=1000, nor
       images = sess.run(next_element)
       sess.close()
 
-  if normalize is not None:
-    pix_min, pix_max = normalize
+  if normalization is not None:
+    pix_min, pix_max = normalization
     images = -1+ 2 * (images - pix_min) / (pix_max - pix_min)
 
   return images
