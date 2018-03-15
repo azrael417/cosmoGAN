@@ -28,6 +28,7 @@ class dcgan(object):
         self.transpose_b = transpose_b # transpose weight matrix in linear layers for (possible) better performance when running on HSW/KNL
         self.stride = 2 # this is fixed for this architecture
         self.distributed = distributed
+        self.n_stats = 1
 
         self._check_architecture_consistency()
 
@@ -130,7 +131,12 @@ class dcgan(object):
         with tf.variable_scope("generator") as scope:
             scope.reuse_variables()
             self.G = self.generator(self.z, is_training=False)
-    
+        
+        self.KS = tf.placeholder(tf.float32, (), name='statistics/KS')
+        with tf.variable_scope("statistics") as scope:
+            self.KS_summary = tf.summary.merge([tf.summary.scalar("statistics/KS", self.KS)])
+ 
+
     def optimizer(self, learning_rate):
 
             #set up optimizers
@@ -170,7 +176,7 @@ class dcgan(object):
             #discriminator
             for idx, (g, v) in enumerate(d_grads_and_vars):
                 if g is not None:
-                    if horovod:
+                    if self.distributed:
                         local_sum = tf.reduce_sum(tf.square(v))
                         v_norm = tf.sqrt(hvd.allreduce(local_sum))
                     else:
@@ -194,7 +200,7 @@ class dcgan(object):
             #generator:
             for idx, (g, v) in enumerate(g_grads_and_vars):
                 if g is not None:
-                    if horovod:
+                    if self.distributed:
                         local_sum = tf.reduce_sum(tf.square(v))
                         v_norm = tf.sqrt(hvd.allreduce(local_sum))
                     else:
