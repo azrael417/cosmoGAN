@@ -76,6 +76,8 @@ def train_dcgan(datafiles, config):
         # iterator = dataset.make_initializable_iterator()
         iterator = tf.data.Iterator.from_string_handle(handle, dataset.output_types, dataset.output_shapes)
         next_element = iterator.get_next()
+        if config.data_format == 'NCHW':
+            next_element = tf.transpose(next_element, [0,3,1,2])
         #train iterator
         trn_iterator = dataset.make_initializable_iterator()
         trn_handle_string = trn_iterator.string_handle()
