@@ -1,4 +1,5 @@
 import tensorflow as tf
+import tensorflow.keras as tfk
 
 def linear(input_, output_size, scope=None, stddev=0.02, bias_start=0.0, transpose_b=False):
 
@@ -27,7 +28,8 @@ def conv2d(input_, out_channels, data_format, kernel=5, stride=2, stddev=0.02, n
 
     with tf.variable_scope(name):
         w = tf.get_variable('w', [kernel, kernel, in_channels, out_channels],
-                            initializer=tf.truncated_normal_initializer(stddev=stddev))
+                            initializer=tfk.initializers.glorot_uniform())
+                            #initializer=tf.truncated_normal_initializer(stddev=stddev))
         
         conv = tf.nn.conv2d(input_, w, strides=strides, padding='SAME', data_format=data_format)
 
@@ -52,7 +54,8 @@ def conv2d_transpose(input_, output_shape, data_format, kernel=5, stride=2, stdd
 
     with tf.variable_scope(name):
         w = tf.get_variable('w', [kernel, kernel, out_channels, in_channels],
-                            initializer=tf.random_normal_initializer(stddev=stddev))
+                            initializer=tfk.initializers.glorot_uniform())
+                            #initializer=tf.random_normal_initializer(stddev=stddev))
         
         deconv = tf.nn.conv2d_transpose(input_, w, output_shape=output_shape, strides=strides, data_format=data_format)
 
