@@ -50,8 +50,17 @@ def train_dcgan(datafiles, config):
     num_batches = config.num_records_total // ( config.batch_size * hvd.size() )
     num_steps = config.epoch*num_batches
 
+    #session config
+    sess_config=tf.ConfigProto(inter_op_parallelism_threads=config.num_inter_threads,
+                               intra_op_parallelism_threads=config.num_intra_threads,
+                               log_device_placement=False,
+                               allow_soft_placement=True)
+
+    #horovod additions
+    sess_config.gpu_options.visible_device_list = str(hvd.local_rank())
+    
     # load test data
-    test_images = sample_tfrecords_to_numpy(tst_datafiles, config.output_size, normalization=(config.pix_min, config.pix_max))
+    test_images = sample_tfrecords_to_numpy(tst_datafiles, config.output_size, sess_config, normalization=(config.pix_min, config.pix_max))
     
     # prepare plots dir
     plots_dir = config.plots_dir + '/' + config.experiment
@@ -107,14 +116,7 @@ def train_dcgan(datafiles, config):
             print("Disabling LARC optimizer")
           d_update_op, g_update_op = gan.optimizer(config.learning_rate)
 
-        #session config
-        sess_config=tf.ConfigProto(inter_op_parallelism_threads=config.num_inter_threads,
-                                   intra_op_parallelism_threads=config.num_intra_threads,
-                                   log_device_placement=False,
-                                   allow_soft_placement=True)
-
         #horovod additions
-        sess_config.gpu_options.visible_device_list = str(hvd.local_rank())
         hooks = [hvd.BroadcastGlobalVariablesHook(0)]
 
         #stop hook

@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import tensorflow as tf
 import os
 
-def sample_tfrecords_to_numpy(tfrecords_filenames, img_size, n_samples=1000, normalization=None):
+def sample_tfrecords_to_numpy(tfrecords_filenames, img_size, sess_config, n_samples=1000, normalization=None):
 
   def decode_record(x):
     parsed_example = tf.parse_single_example(x,
@@ -26,7 +26,7 @@ def sample_tfrecords_to_numpy(tfrecords_filenames, img_size, n_samples=1000, nor
   next_element = iterator.get_next()
 
   # Initialize `iterator` with training data.
-  with tf.Session() as sess:
+  with tf.Session(config=sess_config) as sess:
       sess.run(iterator.initializer, 
               feed_dict={filenames: tfrecords_filenames})
       images = sess.run(next_element)
