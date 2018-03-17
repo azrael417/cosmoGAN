@@ -182,7 +182,7 @@ def train_dcgan(datafiles, config):
 
         #horovod additions
         sess_config.gpu_options.visible_device_list = str(hvd.local_rank())
-        hooks = [hvd.BroadcastGlobalVariablesHook(0)]
+        hooks = []
 
         #stop hook
         hooks.append(tf.train.StopAtStepHook(last_step=num_steps))
@@ -198,6 +198,7 @@ def train_dcgan(datafiles, config):
         #variables initializer
         init_op = tf.global_variables_initializer()
         init_local_op = tf.local_variables_initializer()
+        init_restore = hvd.broadcast_global_variables(0)
  
         if hvd.rank() == 0:
             print("Starting session with {} inter- and {} intra-threads".format(config.num_inter_threads, config.num_intra_threads))
@@ -212,7 +213,11 @@ def train_dcgan(datafiles, config):
             sess.run(trn_init_op, 
               feed_dict={handle: trn_handle, filenames: trn_datafiles})
 
-            load_checkpoint(sess, gan.saver, 'dcgan', checkpoint_dir, step=config.save_every_step)
+            #restore from cp
+            if hvd.rank() == 0:
+              load_checkpoint(sess, gan.saver, 'dcgan', checkpoint_dir, step=config.save_every_step)
+            #broadcast
+            sess.run(init_restore)
 
             epoch = sess.run(gan.increment_epoch)
             start_time = time.time()

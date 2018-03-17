@@ -40,8 +40,9 @@ def load_checkpoint(sess, saver, tag, checkpoint_dir, counter=None, step=False):
         #look for latest checkpoint
         if restore_latest:
             #get list of checkpoints
-            checkpoints = sorted([x.replace(".index","") for x in os.listdir(checkpoint_dir) if x.startswith("model.ckpt") and x.endswith(".index")])
-            ckpt_name = checkpoints[-1]
+            checkpoints = [x.replace(".index","") for x in os.listdir(checkpoint_dir) if x.startswith("model.ckpt") and x.endswith(".index")]
+            checkpoints = sorted([(int(x.split("-")[1]),x) for x in checkpoints], key=lambda tup: tup[0])
+            ckpt_name = checkpoints[-1][1]
 
         saver.restore(sess, os.path.join(checkpoint_dir, ckpt_name))
         print(" [*] Success to read {}".format(ckpt_name))

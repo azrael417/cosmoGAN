@@ -1,5 +1,5 @@
 import tensorflow as tf
-import tensorflow.keras as tfk
+import tensorflow.contrib.keras as tfk
 
 def linear(input_, output_size, scope=None, stddev=0.02, bias_start=0.0, transpose_b=False):
 
