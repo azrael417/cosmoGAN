@@ -5,10 +5,12 @@ import tensorflow as tf
 import wgan_dcgan as dcgan
 import horovod.tensorflow as hvd
 from utils import save_checkpoint, load_checkpoint
-from scipy import stats
 import matplotlib
 matplotlib.use('Agg')
-import matplotlib.pyplot as plt
+
+from validation import *
+
+from scipy import stats
 
 
 class decoder(object):
@@ -32,7 +34,7 @@ class decoder(object):
     return example
 
 
-def sample_tfrecords_to_numpy(tfrecords_filenames, img_size, n_samples=1000, normalization=None):
+def sample_tfrecords_to_numpy(tfrecords_filenames, img_size, sess_config, n_samples=1000, normalization=None):
 
     #init decoder
     dec = decoder((img_size, img_size), normalization=normalization)
@@ -46,11 +48,10 @@ def sample_tfrecords_to_numpy(tfrecords_filenames, img_size, n_samples=1000, nor
     next_element = iterator.get_next()
 
     # Initialize `iterator` with training data.
-    with tf.Session() as sess:
+    with tf.Session(config=sess_config) as sess:
       sess.run(iterator.initializer, 
               feed_dict={filenames: tfrecords_filenames})
       images = sess.run(next_element)
-      sess.close()
       
     return images
 
@@ -119,8 +120,17 @@ def train_dcgan(datafiles, config):
     num_batches = config.num_records_total // ( config.batch_size * hvd.size() )
     num_steps = config.epoch*num_batches
 
+    #session config
+    sess_config=tf.ConfigProto(inter_op_parallelism_threads=config.num_inter_threads,
+                               intra_op_parallelism_threads=config.num_intra_threads,
+                               log_device_placement=False,
+                               allow_soft_placement=True)
+
+    #horovod additions
+    sess_config.gpu_options.visible_device_list = str(hvd.local_rank())
+    
     # load test data
-    test_images = sample_tfrecords_to_numpy(tst_datafiles, config.output_size, normalization=(config.pix_min, config.pix_max))
+    test_images = sample_tfrecords_to_numpy(tst_datafiles, config.output_size, sess_config, n_samples=1000, normalization=(config.pix_min, config.pix_max))
     
     # prepare plots dir
     plots_dir = config.plots_dir + '/' + config.experiment
@@ -145,6 +155,8 @@ def train_dcgan(datafiles, config):
         # iterator = dataset.make_initializable_iterator()
         iterator = tf.data.Iterator.from_string_handle(handle, dataset.output_types, dataset.output_shapes)
         next_element = iterator.get_next()
+        if config.data_format == 'NCHW':
+            next_element = tf.transpose(next_element, [0,3,1,2])
         #train iterator
         trn_iterator = dataset.make_initializable_iterator()
         trn_handle_string = trn_iterator.string_handle()
@@ -173,12 +185,6 @@ def train_dcgan(datafiles, config):
           if hvd.rank() == 0:
             print("Disabling LARC optimizer")
           d_update_op, g_update_op = gan.optimizer(config.learning_rate)
-
-        #session config
-        sess_config=tf.ConfigProto(inter_op_parallelism_threads=config.num_inter_threads,
-                                   intra_op_parallelism_threads=config.num_intra_threads,
-                                   log_device_placement=False,
-                                   allow_soft_placement=True)
 
         #horovod additions
         sess_config.gpu_options.visible_device_list = str(hvd.local_rank())

@@ -22,7 +22,7 @@ verbose = 'True'
 # nodeid = int(os.environ['SLURM_PROCID'])
 # numnodes = int(os.environ['SLURM_NNODES'])
 
-experiment = 'cosmo-new-LARC_%i_batchSize%i_'\
+experiment = 'cosmo-new2-LARC_%i_batchSize%i_'\
              'nd%i_ng%i_gfdim%i_dfdim%i_zdim%i_nup%i'%(output_size, batch_size, nd_layers, ng_layers, gf_dim, df_dim, z_dim, n_up)
 command = 'python -u -m models.main --dataset cosmo --datapath %s '\
           '--output_size %i --c_dim %i --experiment %s '\
