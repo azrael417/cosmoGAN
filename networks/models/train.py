@@ -161,8 +161,9 @@ def train_dcgan(datafiles, config):
             dataset = dataset.shard(hvd.size(), hvd.rank())
         dataset = dataset.shuffle(config.batch_size*10)
         dataset = dataset.map(lambda x: dec.decode(x))  # Parse the record into tensors.
+        # make sure all batches are equal in size
+        dataset = dataset.apply(tf.contrib.data.batch_and_drop_remainder(config.batch_size))
         dataset = dataset.repeat(config.epoch)  # Repeat the input indefinitely.
-        dataset = dataset.batch(config.batch_size)
         handle = tf.placeholder(tf.string,shape=[],name="iterator-placeholder")
         # iterator = dataset.make_initializable_iterator()
         iterator = tf.data.Iterator.from_string_handle(handle, dataset.output_types, dataset.output_shapes)
