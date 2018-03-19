@@ -7,6 +7,7 @@ output_size = 256
 c_dim = 1
 epoch = 50
 batch_size = 64
+#batch_size = 32
 z_dim = 64
 nd_layers = 4
 ng_layers = 4
@@ -16,7 +17,7 @@ save_every_step = 'False'
 # data_format = 'NCHW'
 data_format = 'NHWC'
 transpose_matmul_b = False
-use_larc = True
+use_larc = False
 verbose = 'True'
 nodeid = int(os.environ['SLURM_PROCID'])
 numnodes = int(os.environ['SLURM_NNODES'])
@@ -31,7 +32,7 @@ else:
 experiment = 'cosmo-new_%i_batchSize%i_'\
              'nd%i_ng%i_gfdim%i_dfdim%i_zdim%i_bs%i_%snodes%i_rank%i'%(output_size, batch_size, nd_layers, ng_layers, gf_dim, df_dim, z_dim, batch_size, larc_string, numnodes, nodeid)
 
-command = 'python -u -m models.main --dataset cosmo --datapath %s '\
+command = 'python -u -m models.main --dataset cosmo --datapath %s --fs_type global '\
           '--output_size %i --c_dim %i --experiment %s '\
           '--epoch %i --batch_size %i %s --z_dim %i '\
           '--nd_layers %i --ng_layers %i --gf_dim %i --df_dim %i --save_every_step %s '\

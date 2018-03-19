@@ -282,6 +282,7 @@ def train_dcgan(datafiles, config):
                       stats = compute_evaluation_stats(g_images, test_images)
                       if hvd.rank() == 0:
                         print {k:v for k,v in stats.iteritems()}
+                        plot_pixel_histograms(g_images, test_images, dump_path=plots_dir, tag="step%d_epoch%d" % (gstep, gstep/num_batches_per_rank))
                                
                 except tf.errors.OutOfRangeError:
                     break
