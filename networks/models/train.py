@@ -100,7 +100,7 @@ def plot_pixel_histograms(fake, test, dump_path="./", tag=""):
   if not os.path.exists(plots_dir):
       os.makedirs(plots_dir)
 
-  plt.savefig('%s/pixel_intensity.png'%plots_dir,bbox_inches='tight', format='png')
+  plt.savefig('%s/pixel_intensity.jpg'%plots_dir,bbox_inches='tight', format='jpg')
   plt.savefig('%s/pixel_intensity.pdf'%plots_dir,bbox_inches='tight', format='pdf')
 
 
@@ -221,7 +221,7 @@ def train_dcgan(datafiles, config):
 
             #restore from cp
             if hvd.rank() == 0:
-              load_checkpoint(sess, gan.saver, 'dcgan', checkpoint_dir, step=config.save_every_step)
+              load_checkpoint(sess, gan.saver, checkpoint_dir, step=config.save_every_step)
             #broadcast
             sess.run(init_restore)
 
