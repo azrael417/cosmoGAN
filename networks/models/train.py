@@ -84,13 +84,14 @@ def train_dcgan(datafiles, config):
     #horovod additions
     sess_config.gpu_options.visible_device_list = str(hvd.local_rank())
     
-    # load test data
-    test_images = sample_tfrecords_to_numpy(tst_datafiles, config.output_size, sess_config, n_samples=1000, normalization=(config.pix_min, config.pix_max))
-    
     # prepare plots dir
     plots_dir = config.plots_dir + '/' + config.experiment
     if not os.path.exists(plots_dir):
       os.makedirs(plots_dir)
+
+    # load test data
+    test_images = sample_tfrecords_to_numpy(tst_datafiles, config.output_size, sess_config, n_samples=1000, normalization=(config.pix_min, config.pix_max))
+    dump_samples(test_images, dump_path=plots_dir, tag="real samples")
 
     training_graph = tf.Graph()
 
@@ -207,8 +208,8 @@ def train_dcgan(datafiles, config):
                         print {k:v for k,v in stats.iteritems()}
                         writer.add_summary(KS_summary, gstep)
                         plot_pixel_histograms(g_images, test_images, dump_path=plots_dir, tag="step%d_epoch%d" % (gstep, gstep/num_batches_per_rank))
+                        dump_samples(g_images, dump_path="%s/step%d_epoch%d" % (plots_dir, gstep, gstep/num_batches_per_rank), tag="synthetic")
                       
-
                     #verbose printing
                     if config.verbose:
                         errC, errG = sess.run([gan.c_loss,gan.g_loss], feed_dict={handle: trn_handle})

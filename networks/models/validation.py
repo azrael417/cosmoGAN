@@ -4,6 +4,9 @@ import matplotlib.pyplot as plt
 import tensorflow as tf
 import horovod.tensorflow as hvd
 
+import matplotlib
+matplotlib.use('Agg')
+
 import os
 
 def get_hist_bins(data, bins=None, get_error=False, range=(-1.1,1.1)):
@@ -67,4 +70,24 @@ def plot_pixel_histograms(fake, test, dump_path="./", tag=""):
 
   plt.savefig('%s/pixel_intensity.jpg'%plots_dir,bbox_inches='tight', format='jpg')
   plt.savefig('%s/pixel_intensity.pdf'%plots_dir,bbox_inches='tight', format='pdf')
+
+
+def dump_samples(images, dump_path="./", tag=""):
+
+    # save np arrays
+    np.savez(os.path.join(dump_path, "%s_images.npz"%tag), images)
+
+    # save figures
+    fig, ax = plt.subplots(nrows=3, ncols=3, figsize=(8,7.6), 
+                           gridspec_kw={'wspace':0.02, 'hspace':0.00})
+    idx = np.random.randint(0, images.shape[0], 9)
+    for i, a in zip(idx, ax.flatten()):
+        a.imshow(images[i])
+        a.axis("off")
+    fig.suptitle(tag, fontsize=18)
+    fig.subplots_adjust(top=0.95)
+    fig.savefig('%s/%s.jpg'%(dump_path, tag.replace(" ", "_")),
+                bbox_inches='tight', pad_inches=0, format='jpg')
+    fig.savefig('%s/%s.eps'%(dump_path, tag.replace(" ", "_")),
+                bbox_inches='tight', pad_inches=0, format='eps')
 

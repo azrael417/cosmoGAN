@@ -5,7 +5,7 @@ import shlex
 datapath = '/data1/adalbert/Maps10/tfrecords/256/'
 output_size = 256
 c_dim = 1
-epoch = 50
+epoch = 100
 batch_size = 64
 z_dim = 64
 nd_layers = 4
