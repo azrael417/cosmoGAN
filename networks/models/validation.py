@@ -2,42 +2,9 @@ import numpy as np
 from scipy import stats
 import matplotlib.pyplot as plt
 import tensorflow as tf
+import horovod.tensorflow as hvd
+
 import os
-
-def sample_tfrecords_to_numpy(tfrecords_filenames, img_size, sess_config, n_samples=1000, normalization=None):
-
-  def decode_record(x):
-    parsed_example = tf.parse_single_example(x,
-        features = {
-            "data_raw": tf.FixedLenFeature([],tf.string)
-        }
-    )
-
-    example = tf.decode_raw(parsed_example['data_raw'],tf.float32)
-    example = tf.reshape(example,[img_size, img_size])
-    return example
-         
-  filenames = tf.placeholder(tf.string, shape=[None])
-  dataset = tf.data.TFRecordDataset(filenames)
-  dataset = dataset.map(lambda x: decode_record(x))  # Parse the record into tensors.
-  dataset = dataset.repeat(1)  # Repeat the input indefinitely.
-  dataset = dataset.batch(n_samples)
-  iterator = dataset.make_initializable_iterator()
-  next_element = iterator.get_next()
-
-  # Initialize `iterator` with training data.
-  with tf.Session(config=sess_config) as sess:
-      sess.run(iterator.initializer, 
-              feed_dict={filenames: tfrecords_filenames})
-      images = sess.run(next_element)
-      sess.close()
-
-  if normalization is not None:
-    pix_min, pix_max = normalization
-    images = -1+ 2 * (images - pix_min) / (pix_max - pix_min)
-
-  return images
-        
 
 def get_hist_bins(data, bins=None, get_error=False, range=(-1.1,1.1)):
     bins = 60 if bins is None else bins
@@ -60,7 +27,7 @@ def compute_evaluation_stats(fake, test):
 def plot_pixel_histograms(fake, test, dump_path="./", tag=""):
   test_bins, test_hist, test_err = get_hist_bins(test, get_error=True)
   fake_bins, fake_hist, fake_err = get_hist_bins(fake, get_error=True)
-  ks_test = compute_evaluation_stats(fake, test)['KS']
+  ks_test = stats.ks_2samp(test_hist, fake_hist)[1]
 
   fig, ax = plt.subplots(figsize=(7,6))
   #plot test
@@ -82,11 +49,22 @@ def plot_pixel_histograms(fake, test, dump_path="./", tag=""):
   # plt.xlim(-0.3,1.1)
   plt.title('Pixels distribution (KS=%2.3f)'%ks_test, fontsize=16);
 
-  if dump_path is not None:
-    plots_dir = "%s/%s" % (dump_path, tag)
-    if not os.path.exists(plots_dir):
-        os.makedirs(plots_dir)
+  if dump_path is None:
+    return None
 
-    plt.savefig('%s/pixel_intensity.jpg'%plots_dir,bbox_inches='tight', format='jpg')
-    plt.savefig('%s/pixel_intensity.pdf'%plots_dir,bbox_inches='tight', format='pdf')
+  if not os.path.exists(dump_path):
+    try:
+      os.makedirs(dump_path)
+    except:
+      print("Rank {}: path {} does already exist.".format(hvd.rank(),dump_path))
+
+  plots_dir = os.path.join(dump_path, tag)
+  if not os.path.exists(plots_dir):
+    try:
+      os.makedirs(plots_dir)
+    except:
+      print("Rank {}: path {} does already exist.".format(hvd.rank(),os.path.join(dump_path,tag)))
+
+  plt.savefig('%s/pixel_intensity.jpg'%plots_dir,bbox_inches='tight', format='jpg')
+  plt.savefig('%s/pixel_intensity.pdf'%plots_dir,bbox_inches='tight', format='pdf')
 
