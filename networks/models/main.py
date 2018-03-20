@@ -35,6 +35,7 @@ flags.DEFINE_string("plots_dir", "plots", "Directory name to save the plots [plo
 flags.DEFINE_string("experiment", "run_0", "Tensorboard run directory name [run_0]")
 flags.DEFINE_boolean("save_every_step", False, "Save a checkpoint after every step [False]")
 flags.DEFINE_boolean("verbose", True, "print loss on every step [False]")
+flags.DEFINE_string("fs_type", "global", "file system type, global or local [global]")
 flags.DEFINE_integer("num_inter_threads", 1, "number of concurrent tasks [1]")
 flags.DEFINE_integer("num_intra_threads", 4, "number of threads per task [4]")
 
@@ -73,12 +74,29 @@ def main(_):
 
     if hvd.rank() == 0:
         print("Loading data")
-    trn_datafiles, tst_datafiles, n_records, pix_min, pix_max=get_data_files()
+    trn_datafiles, tst_datafiles, config.num_records_total, pix_min, pix_max=get_data_files()
     if hvd.rank() == 0:
         print("done.")
         
-    if not config.num_records_total:
-        config.num_records_total = n_records
+    #adjust the number of files depending on whether a global or local FS is used:
+    num_files = len(trn_datafiles)
+    num_total_files=0
+    #cut filenames:
+    if config.fs_type == "global":
+        #files get distributed across all nodes
+        trn_datafiles = trn_datafiles[:(len(trn_datafiles) // hvd.size() * hvd.size())]
+        config.num_records_total = config.num_records_total / num_files * len(trn_datafiles)
+        num_total_files = len(trn_datafiles)
+    else:
+        #files are local to each node
+        trn_datafiles = trn_datafiles[:(len(trn_datafiles) // hvd.local_size() * hvd.local_size())]
+        config.num_records_total = config.num_records_total / num_files * len(trn_datafiles) * hvd.size() / hvd.local_size()
+        num_total_files = len(trn_datafiles) * hvd.size() / hvd.local_size()
+
+    if hvd.rank() == 0:
+        print("Working on {} files with a total of {} samples".format(num_total_files,config.num_records_total))
+
+    #update min and max values
     config.pix_min = pix_min
     config.pix_max = pix_max
     pprint.PrettyPrinter().pprint(config.__flags)

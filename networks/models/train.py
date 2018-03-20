@@ -96,9 +96,18 @@ def plot_pixel_histograms(fake, test, dump_path="./", tag=""):
   # plt.xlim(-0.3,1.1)
   plt.title('Pixels distribution (KS=%2.3f)'%ks_test, fontsize=16);
 
-  plots_dir = "%s/%s" % (dump_path, tag)
+  if not os.path.exists(dump_path):
+    try:
+      os.makedirs(dump_path)
+    except:
+      print("Rank {}: path {} does already exist.".format(hvd.rank(),dump_path))
+
+  plots_dir = os.path.join(dump_path, tag)
   if not os.path.exists(plots_dir):
+    try:
       os.makedirs(plots_dir)
+    except:
+      print("Rank {}: path {} does already exist.".format(hvd.rank(),os.path.join(dump_path,tag)))
 
   plt.savefig('%s/pixel_intensity.jpg'%plots_dir,bbox_inches='tight', format='jpg')
   plt.savefig('%s/pixel_intensity.pdf'%plots_dir,bbox_inches='tight', format='pdf')
@@ -117,8 +126,11 @@ def generate_samples(sess, dcgan, n_batches=20):
 
 def train_dcgan(datafiles, config):
     trn_datafiles, tst_datafiles = datafiles
-    num_batches = config.num_records_total // ( config.batch_size * hvd.size() )
-    num_steps = config.epoch*num_batches
+    num_files = len(trn_datafiles)
+    #comput enumber of batches and stuff
+    num_samples_per_rank = config.num_records_total // hvd.size()
+    num_batches_per_rank = num_samples_per_rank // config.batch_size
+    num_steps_per_rank = config.epoch * num_batches_per_rank
 
     #session config
     sess_config=tf.ConfigProto(inter_op_parallelism_threads=config.num_inter_threads,
@@ -149,8 +161,9 @@ def train_dcgan(datafiles, config):
             dataset = dataset.shard(hvd.size(), hvd.rank())
         dataset = dataset.shuffle(config.batch_size*10)
         dataset = dataset.map(lambda x: dec.decode(x))  # Parse the record into tensors.
+        # make sure all batches are equal in size
+        dataset = dataset.apply(tf.contrib.data.batch_and_drop_remainder(config.batch_size))
         dataset = dataset.repeat(config.epoch)  # Repeat the input indefinitely.
-        dataset = dataset.batch(config.batch_size)
         handle = tf.placeholder(tf.string,shape=[],name="iterator-placeholder")
         # iterator = dataset.make_initializable_iterator()
         iterator = tf.data.Iterator.from_string_handle(handle, dataset.output_types, dataset.output_shapes)
@@ -191,12 +204,12 @@ def train_dcgan(datafiles, config):
         hooks = []
 
         #stop hook
-        hooks.append(tf.train.StopAtStepHook(last_step=num_steps))
+        hooks.append(tf.train.StopAtStepHook(last_step=num_steps_per_rank))
 
         checkpoint_dir = os.path.join(config.checkpoint_dir, config.experiment)
 
         if hvd.rank() == 0:
-          checkpoint_save_freq = num_batches * 2
+          checkpoint_save_freq = num_batches_per_rank * 2
           checkpoint_saver = gan.saver
           hooks.append(tf.train.CheckpointSaverHook(checkpoint_dir=checkpoint_dir, save_steps=checkpoint_save_freq, saver=checkpoint_saver))
 
@@ -250,7 +263,7 @@ def train_dcgan(datafiles, config):
                       if hvd.rank() == 0:
                         print {k:v for k,v in stats.iteritems()}
                         writer.add_summary(KS_summary, gstep)
-                        plot_pixel_histograms(g_images, test_images, dump_path=plots_dir, tag="step%d_epoch%d" % (gstep, gstep/num_batches))
+                        plot_pixel_histograms(g_images, test_images, dump_path=plots_dir, tag="step%d_epoch%d" % (gstep, gstep/num_batches_per_rank))
                       
 
                     #verbose printing
@@ -258,13 +271,13 @@ def train_dcgan(datafiles, config):
                         errC, errG = sess.run([gan.c_loss,gan.g_loss], feed_dict={handle: trn_handle})
 
                         print("Epoch: [%2d] Step: [%4d/%4d] time: %4.4f, c_loss: %.8f, g_loss: %.8f" \
-                            % (epoch, gstep, num_steps, time.time() - start_time, errC, errG))
+                            % (epoch, gstep, num_steps_per_rank, time.time() - start_time, errC, errG))
 
                     elif gstep%100 == 0:
-                        print("Epoch: [%2d] Step: [%4d/%4d] time: %4.4f"%(epoch, gstep, num_batches, time.time() - start_time))
+                        print("Epoch: [%2d] Step: [%4d/%4d] time: %4.4f"%(epoch, gstep, num_batches_per_rank, time.time() - start_time))
 
                     # increment epoch counter
-                    if gstep%num_batches == 0:
+                    if gstep%num_batches_per_rank == 0:
                       epoch = sess.run(gan.increment_epoch)
                       g_images = generate_samples(sess, gan)
                       stats = compute_evaluation_stats(g_images, test_images)
