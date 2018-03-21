@@ -30,8 +30,8 @@ def main():
     data_format = 'NHWC'
     transpose_matmul_b = False
     verbose = 'True'
-    nranks = int(os.environ['OMPI_COMM_WORLD_SIZE'])
-    rank = int(os.environ['OMPI_COMM_WORLD_NODE_RANK'])
+    nranks = int(os.environ.get('OMPI_COMM_WORLD_SIZE', '1'))
+    rank = int(os.environ.get('OMPI_COMM_WORLD_NODE_RANK', '0'))
 
     #copy environment
     my_env = dict(os.environ.copy())
