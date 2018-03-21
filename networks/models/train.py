@@ -131,6 +131,10 @@ def train_dcgan(datafiles, config):
     num_samples_per_rank = config.num_records_total // hvd.size()
     num_batches_per_rank = num_samples_per_rank // config.batch_size
     num_steps_per_rank = config.epoch * num_batches_per_rank
+    num_test_samples = np.min([len(tst_datafiles),1000])
+
+    if hvd.rank() == 0:
+      print("Found {} samples per rank. Using batch size {} and max epoch count {}, that gives {} number of total steps.".format(num_samples_per_rank, config.batch_size, config.epoch,num_steps_per_rank))
 
     #session config
     sess_config=tf.ConfigProto(inter_op_parallelism_threads=config.num_inter_threads,
@@ -142,12 +146,21 @@ def train_dcgan(datafiles, config):
     sess_config.gpu_options.visible_device_list = str(hvd.local_rank())
     
     # load test data
-    test_images = sample_tfrecords_to_numpy(tst_datafiles, config.output_size, sess_config, n_samples=1000, normalization=(config.pix_min, config.pix_max))
+    test_images = sample_tfrecords_to_numpy(tst_datafiles, config.output_size, sess_config, n_samples=num_test_samples, normalization=(config.pix_min, config.pix_max))
     
     # prepare plots dir
-    plots_dir = config.plots_dir + '/' + config.experiment
+    plots_dir = os.path.join(config.plots_dir, config.experiment)
+    if not os.path.exists(config.plots_dir):
+      try:
+        os.makedirs(config.plots_dir)
+      except:
+        print("Rank {}: path {} does already exist.".format(hvd.rank(),config.plots_dir))
     if not os.path.exists(plots_dir):
-      os.makedirs(plots_dir)
+      try:
+        os.makedirs(plots_dir)
+      except:
+        print("Rank {}: path {} does already exist.".format(hvd.rank(),plots_dir))
+
 
     training_graph = tf.Graph()
 
@@ -282,6 +295,7 @@ def train_dcgan(datafiles, config):
                       stats = compute_evaluation_stats(g_images, test_images)
                       if hvd.rank() == 0:
                         print {k:v for k,v in stats.iteritems()}
+                        plot_pixel_histograms(g_images, test_images, dump_path=plots_dir, tag="step%d_epoch%d" % (gstep, gstep/num_batches_per_rank))
                                
                 except tf.errors.OutOfRangeError:
                     break

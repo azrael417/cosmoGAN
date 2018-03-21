@@ -9,7 +9,8 @@ import glob
 flags = tf.app.flags
 flags.DEFINE_string("dataset", "cosmo", "The name of dataset [cosmo]")
 flags.DEFINE_string("datapath", "data/tfrecords", "Path to input data files")
-flags.DEFINE_integer("num_records_total", None, "Number of total records. Inferred if not specified (can take time though).")
+flags.DEFINE_integer("num_records_total", 180000, "Number of total records. Inferred if not specified (can take time though).")
+flags.DEFINE_integer("num_files_total", 4500, "Number of total files. Inferred if not specified (can take time though).")
 flags.DEFINE_integer("epoch", 25, "Epoch to train [25]")
 flags.DEFINE_float("learning_rate", 0.0002, "Learning rate of for adam [0.0002]")
 flags.DEFINE_float("pix_min", 0.0, "Minimum pixel value for normalization [0.]")
@@ -72,29 +73,25 @@ def main(_):
     #init horovod
     hvd.init()
 
-    if hvd.rank() == 0:
-        print("Loading data")
+    print("Loading data")
     trn_datafiles, tst_datafiles, config.num_records_total, pix_min, pix_max=get_data_files()
-    if hvd.rank() == 0:
-        print("done.")
+    print("done.")
         
     #adjust the number of files depending on whether a global or local FS is used:
-    num_files = len(trn_datafiles)
-    num_total_files=0
     #cut filenames:
     if config.fs_type == "global":
         #files get distributed across all nodes
         trn_datafiles = trn_datafiles[:(len(trn_datafiles) // hvd.size() * hvd.size())]
-        config.num_records_total = config.num_records_total / num_files * len(trn_datafiles)
-        num_total_files = len(trn_datafiles)
+        config.num_records_total = config.num_records_total / config.num_files_total * len(trn_datafiles)
+        config.num_files_total = len(trn_datafiles)
     else:
         #files are local to each node
         trn_datafiles = trn_datafiles[:(len(trn_datafiles) // hvd.local_size() * hvd.local_size())]
-        config.num_records_total = config.num_records_total / num_files * len(trn_datafiles) * hvd.size() / hvd.local_size()
-        num_total_files = len(trn_datafiles) * hvd.size() / hvd.local_size()
+        config.num_records_total = config.num_records_total / config.num_files_total * len(trn_datafiles) * hvd.size() / hvd.local_size()
+        config.num_files_total = len(trn_datafiles) * hvd.size() / hvd.local_size()
 
     if hvd.rank() == 0:
-        print("Working on {} files with a total of {} samples".format(num_total_files,config.num_records_total))
+        print("Working on {} files with a total of {} samples".format(config.num_files_total,config.num_records_total))
 
     #update min and max values
     config.pix_min = pix_min
