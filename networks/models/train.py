@@ -55,63 +55,6 @@ def sample_tfrecords_to_numpy(tfrecords_filenames, img_size, sess_config, n_samp
       
     return images
 
-def get_hist_bins(data, get_error=False):
-    y, x = np.histogram(data, bins=60, range=(-1.1,1.1))
-    x = 0.5*(x[1:]+x[:-1])
-    if get_error == True:
-        y_err = np.sqrt(y)
-        return x, y, y_err
-    else:
-        return x, y
-
-
-def compute_evaluation_stats(fake, test):
-  test_bins, test_hist = get_hist_bins(test)
-  fake_bins, fake_hist = get_hist_bins(fake)
-  return {"KS":stats.ks_2samp(test_hist, fake_hist)[1]}
-
-
-def plot_pixel_histograms(fake, test, dump_path="./", tag=""):
-  test_bins, test_hist, test_err = get_hist_bins(test, get_error=True)
-  fake_bins, fake_hist, fake_err = get_hist_bins(fake, get_error=True)
-  ks_test = stats.ks_2samp(test_hist, fake_hist)[1]
-
-  fig, ax = plt.subplots(figsize=(7,6))
-  #plot test
-  ax.errorbar(test_bins, test_hist, yerr=test_err, fmt='--ks', \
-  label='Test', markersize=7)
-
-  # plot generated
-  fake_label = 'GAN-' + tag if tag is not None else "GAN"
-  ax.errorbar(fake_bins, fake_hist, yerr=fake_err, fmt='o', \
-             label=fake_label, linewidth=2, markersize=6);
-
-  ax.legend(loc="best", fontsize=10)
-  ax.set_yscale('log');
-  ax.set_xlabel('Pixel Intensity', fontsize=18);
-  ax.set_ylabel('Counts (arb. units)', fontsize=18);
-  plt.tick_params(axis='both', labelsize=15, length=5)
-  plt.tick_params(axis='both', which='minor', length=3)
-  # plt.ylim(5e-10, 8*10**7)
-  # plt.xlim(-0.3,1.1)
-  plt.title('Pixels distribution (KS=%2.3f)'%ks_test, fontsize=16);
-
-  if not os.path.exists(dump_path):
-    try:
-      os.makedirs(dump_path)
-    except:
-      print("Rank {}: path {} does already exist.".format(hvd.rank(),dump_path))
-
-  plots_dir = os.path.join(dump_path, tag)
-  if not os.path.exists(plots_dir):
-    try:
-      os.makedirs(plots_dir)
-    except:
-      print("Rank {}: path {} does already exist.".format(hvd.rank(),os.path.join(dump_path,tag)))
-
-  #plt.savefig('%s/pixel_intensity.png'%plots_dir,bbox_inches='tight', format='png')
-  plt.savefig('%s/pixel_intensity.pdf'%plots_dir,bbox_inches='tight', format='pdf')
-
 
 def generate_samples(sess, dcgan, n_batches=20):
     z_sample = np.random.normal(size=(dcgan.batch_size, dcgan.z_dim))
@@ -147,7 +90,7 @@ def train_dcgan(datafiles, config):
     
     # load test data
     test_images = sample_tfrecords_to_numpy(tst_datafiles, config.output_size, sess_config, n_samples=num_test_samples, normalization=(config.pix_min, config.pix_max))
-    
+
     # prepare plots dir
     plots_dir = os.path.join(config.plots_dir, config.experiment)
     if not os.path.exists(config.plots_dir):
@@ -162,6 +105,10 @@ def train_dcgan(datafiles, config):
         print("Rank {}: path {} does already exist.".format(hvd.rank(),plots_dir))
 
 
+    # load test data
+    test_images = sample_tfrecords_to_numpy(tst_datafiles, config.output_size, sess_config, n_samples=1000, normalization=(config.pix_min, config.pix_max))
+    dump_samples(test_images, dump_path=plots_dir, tag="real samples")
+
     training_graph = tf.Graph()
 
     with training_graph.as_default():
@@ -174,8 +121,9 @@ def train_dcgan(datafiles, config):
             dataset = dataset.shard(hvd.size(), hvd.rank())
         dataset = dataset.shuffle(config.batch_size*10)
         dataset = dataset.map(lambda x: dec.decode(x))  # Parse the record into tensors.
+        # make sure all batches are equal in size
+        dataset = dataset.apply(tf.contrib.data.batch_and_drop_remainder(config.batch_size))
         dataset = dataset.repeat(config.epoch)  # Repeat the input indefinitely.
-        dataset = dataset.batch(config.batch_size)
         handle = tf.placeholder(tf.string,shape=[],name="iterator-placeholder")
         # iterator = dataset.make_initializable_iterator()
         iterator = tf.data.Iterator.from_string_handle(handle, dataset.output_types, dataset.output_shapes)
@@ -246,7 +194,7 @@ def train_dcgan(datafiles, config):
 
             #restore from cp
             if hvd.rank() == 0:
-              load_checkpoint(sess, gan.saver, 'dcgan', checkpoint_dir, step=config.save_every_step)
+              load_checkpoint(sess, gan.saver, checkpoint_dir, step=config.save_every_step)
             #broadcast
             sess.run(init_restore)
 
@@ -276,8 +224,8 @@ def train_dcgan(datafiles, config):
                         print {k:v for k,v in stats.iteritems()}
                         writer.add_summary(KS_summary, gstep)
                         plot_pixel_histograms(g_images, test_images, dump_path=plots_dir, tag="step%d_epoch%d" % (gstep, gstep/num_batches_per_rank))
+                        dump_samples(g_images, dump_path="%s/step%d_epoch%d" % (plots_dir, gstep, gstep/num_batches_per_rank), tag="synthetic")
                       
-
                     #verbose printing
                     if config.verbose:
                         errC, errG = sess.run([gan.c_loss,gan.g_loss], feed_dict={handle: trn_handle})

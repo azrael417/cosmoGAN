@@ -14,7 +14,7 @@ def save_checkpoint(sess, saver, tag, checkpoint_dir, counter, step=False):
 
     saver.save(sess, os.path.join(checkpoint_dir, model_name), global_step=counter)
 
-def load_checkpoint(sess, saver, tag, checkpoint_dir, counter=None, step=False):
+def load_checkpoint(sess, saver, checkpoint_dir, counter=None, step=False):
     print(" [*] Reading checkpoints...")
 
     if step:
