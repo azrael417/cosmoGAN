@@ -193,9 +193,12 @@ class dcgan(object):
                         d_effective_lr = d_larc_local_lr
                     else:
                         d_effective_lr = math_ops.minimum(d_larc_local_lr, 1.0)
-                    
+                                                            
                     #DEBUG
-                    #d_effective_lr = tf.Print(d_effective_lr, ["DEBUG EFF_LR CRITIC ", d_effective_lr," STEP ",self.global_step," NAME ",g.name, "ID", idx])
+                    d_effective_lr = tf.Print(d_effective_lr,["DEBUG CRITIC","EFF_LR",d_effective_lr,
+                                                              "GNORM",d_g_norm,
+                                                              "VNORM",d_v_norm,
+                                                              "STEP",self.global_step,"NAME",g.name,"ID",idx])
                     #DEBUG
 
                     #multiply gradients
@@ -223,7 +226,10 @@ class dcgan(object):
                         g_effective_lr = math_ops.minimum(g_larc_local_lr, 1.0)
                     
                     #DEBUG
-                    #g_effective_lr = tf.Print(g_effective_lr, ["DEBUG EFF_LR GENERATOR ",g_effective_lr," STEP ",self.global_step," NAME ",g.name, "ID", idx])
+                    g_effective_lr = tf.Print(g_effective_lr,["DEBUG GENERATOR","EFF_LR",g_effective_lr,
+                                                              "GNORM",g_g_norm,
+                                                              "VNORM",g_v_norm,
+                                                              "STEP",self.global_step,"NAME",g.name,"ID",idx])
                     #DEBUG
 
                     #multiply gradients
