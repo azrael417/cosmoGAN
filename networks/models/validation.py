@@ -68,7 +68,7 @@ def plot_pixel_histograms(fake, test, dump_path="./", tag=""):
     except:
       print("Rank {}: path {} does already exist.".format(hvd.rank(),os.path.join(dump_path,tag)))
 
-  plt.savefig('%s/pixel_intensity.jpg'%plots_dir,bbox_inches='tight', format='jpg')
+  #plt.savefig('%s/pixel_intensity.jpg'%plots_dir,bbox_inches='tight', format='jpg')
   plt.savefig('%s/pixel_intensity.pdf'%plots_dir,bbox_inches='tight', format='pdf')
 
 
@@ -86,8 +86,8 @@ def dump_samples(images, dump_path="./", tag=""):
         a.axis("off")
     fig.suptitle(tag, fontsize=18)
     fig.subplots_adjust(top=0.95)
-    fig.savefig('%s/%s.jpg'%(dump_path, tag.replace(" ", "_")),
-                bbox_inches='tight', pad_inches=0, format='jpg')
-    fig.savefig('%s/%s.eps'%(dump_path, tag.replace(" ", "_")),
-                bbox_inches='tight', pad_inches=0, format='eps')
+    #fig.savefig('%s/%s.jpg'%(dump_path, tag.replace(" ", "_")),
+    #            bbox_inches='tight', pad_inches=0, format='jpg')
+    #fig.savefig('%s/%s.eps'%(dump_path, tag.replace(" ", "_")),
+    #            bbox_inches='tight', pad_inches=0, format='eps')
 
