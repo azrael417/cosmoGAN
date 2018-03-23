@@ -75,7 +75,7 @@ def plot_pixel_histograms(fake, test, dump_path="./", tag=""):
 def dump_samples(images, dump_path="./", tag=""):
 
     # save np arrays
-    np.savez(os.path.join(dump_path, "%s_images.npz"%tag), images)
+    # np.savez(os.path.join(dump_path, "%s_images.npz"%tag), images)
 
     # save figures
     fig, ax = plt.subplots(nrows=3, ncols=3, figsize=(8,7.6), 

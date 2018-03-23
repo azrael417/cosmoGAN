@@ -9,7 +9,7 @@ module unload PrgEnv-cray
 module load PrgEnv-gnu
 module load gcc/5.3.0
 module load cudatoolkit/8.0.61_2.4.3-6.0.4.0_3.1__gb475d12
-source activate tensorflow
+source activate tensorflow-hp
 
 #add the models to the pythonpath
 export PYTHONPATH=$(pwd)/../networks
