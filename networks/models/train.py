@@ -111,6 +111,9 @@ def train_dcgan(datafiles, config):
 
     training_graph = tf.Graph()
 
+    # save network quality history
+    stats_hist = []
+
     with training_graph.as_default():
 
         #setup input pipeline
@@ -219,6 +222,9 @@ def train_dcgan(datafiles, config):
                       stats = compute_evaluation_stats(g_images, test_images)
                       #KS summary
                       KS_summary = sess.run(gan.KS_summary, feed_dict={gan.KS:stats['KS']})
+                      stats_hist += [[gstep, epoch, time.time() - start_time, stats['KS']]]
+                      np.savez("%s/stats_hist.npz" % plots_dir, np.array(stats_hist))
+                      np.savetxt("%s/stats_hist.csv" % plots_dir, np.array(stats_hist), fmt='%.4e', delimiter='\t')
 
                       if hvd.rank() == 0:
                         print {k:v for k,v in stats.iteritems()}
