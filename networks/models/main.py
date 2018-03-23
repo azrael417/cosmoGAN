@@ -6,6 +6,9 @@ import pprint
 import os
 import glob
 
+# limit tensorflow spewage to just warnings and errors
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '1'
+
 flags = tf.app.flags
 flags.DEFINE_string("dataset", "cosmo", "The name of dataset [cosmo]")
 flags.DEFINE_string("datapath", "data/tfrecords", "Path to input data files")
