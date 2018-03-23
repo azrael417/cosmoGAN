@@ -22,7 +22,7 @@ export MPICH_RDMA_ENABLED_CUDA=1
 
 #run training
 srun -N ${SLURM_NNODES} -n ${SLURM_NNODES} -c 24 -u python -u ../networks/run_dcgan_daint.py \
-	--datapath=/scratch/snx3000/tkurth/data/cosmoGAN/tfrecord/256 \
+	--datapath=/scratch/snx3000/adalbert/data/cosmoGAN/tfrecord/256 \
 	--z_dim=100 \
 	--gf_dim=64 \
 	--gf_dim=64 \
