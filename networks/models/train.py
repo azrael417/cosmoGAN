@@ -223,14 +223,14 @@ def train_dcgan(datafiles, config):
                       #KS summary
                       KS_summary = sess.run(gan.KS_summary, feed_dict={gan.KS:stats['KS']})
                       stats_hist += [[gstep, epoch, time.time() - start_time, stats['KS']]]
-                      np.savez("%s/stats_hist.npz" % plots_dir, np.array(stats_hist))
-                      np.savetxt("%s/stats_hist.csv" % plots_dir, np.array(stats_hist), fmt='%.4e', delimiter='\t')
 
                       if hvd.rank() == 0:
                         print {k:v for k,v in stats.iteritems()}
                         writer.add_summary(KS_summary, gstep)
                         plot_pixel_histograms(g_images, test_images, dump_path=plots_dir, tag="step%d_epoch%d" % (gstep, gstep/num_batches_per_rank))
                         dump_samples(g_images, dump_path="%s/step%d_epoch%d" % (plots_dir, gstep, gstep/num_batches_per_rank), tag="synthetic")
+                        np.savez("%s/stats_hist.npz" % plots_dir, np.array(stats_hist))
+                        np.savetxt("%s/stats_hist.csv" % plots_dir, np.array(stats_hist), fmt='%.4e', delimiter='\t')
                       
                     #verbose printing
                     if config.verbose:
