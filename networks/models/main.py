@@ -15,6 +15,7 @@ flags.DEFINE_string("datapath", "data/tfrecords", "Path to input data files")
 flags.DEFINE_integer("num_records_total", 180000, "Number of total records. Inferred if not specified (can take time though).")
 flags.DEFINE_integer("num_files_total", 4500, "Number of total files. Inferred if not specified (can take time though).")
 flags.DEFINE_integer("epoch", 25, "Epoch to train [25]")
+flags.DEFINE_integer("trn_sz", -1, "Maximum number of files to use for training [-1]")
 flags.DEFINE_float("learning_rate", 0.0002, "Learning rate of for adam [0.0002]")
 flags.DEFINE_float("pix_min", 0.0, "Minimum pixel value for normalization [0.]")
 flags.DEFINE_float("pix_max", 1.0, "Maximum pixel value for normalization [1.]")
@@ -44,9 +45,15 @@ flags.DEFINE_integer("num_intra_threads", 4, "number of threads per task [4]")
 
 config = flags.FLAGS
 
-def get_data_files(compute_stat=True):
+def get_data_files(trn_sz, compute_stat=True):
     train_data_files = glob.glob(config.datapath + "/*train*.tfrecords")
     valid_data_files = glob.glob(config.datapath + "/*test*.tfrecords")
+
+    if trn_sz > 0:
+        # scale the validation data files down accordingly
+        val_sz = (len(valid_data_files) * trn_sz) // len(train_data_files)
+        train_data_files = train_data_files[0:trn_sz]
+        valid_data_files = valid_data_files[0:val_sz]
 
     #load stats file
     statsfile = config.datapath + '/stats_train.npz'
@@ -76,7 +83,7 @@ def main(_):
     hvd.init()
 
     print("Loading data")
-    trn_datafiles, tst_datafiles, config.num_records_total, pix_min, pix_max=get_data_files()
+    trn_datafiles, tst_datafiles, config.num_records_total, pix_min, pix_max=get_data_files(config.trn_sz)
     print("done.")
         
     #adjust the number of files depending on whether a global or local FS is used:
@@ -98,7 +105,13 @@ def main(_):
     #update min and max values
     config.pix_min = pix_min
     config.pix_max = pix_max
-    pprint.PrettyPrinter().pprint(config.__flags)
+
+    # print values of all the flags
+    print 'Command-line flag settings:'
+    d = config.flag_values_dict()
+    for k in sorted(d):
+        print '  {} = {}'.format(k, d[k])
+
     train.train_dcgan((trn_datafiles, tst_datafiles), config)
 
 
