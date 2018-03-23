@@ -34,6 +34,7 @@ flags.DEFINE_integer("num_updates", 5, "Number of critic updates per generator u
 flags.DEFINE_integer("output_size", 64, "The size of the output images to produce [64]")
 flags.DEFINE_integer("c_dim", 1, "Dimension of image color. [1]")
 flags.DEFINE_string("data_format", "NHWC", "data format [NHWC]")
+flags.DEFINE_string("data_type", "fp32", "network data type [fp32]")
 flags.DEFINE_boolean("transpose_matmul_b", False, "Transpose matmul B matrix for performance [False]")
 flags.DEFINE_string("checkpoint_dir", "checkpoints", "Directory name to save the checkpoints [checkpoint]")
 flags.DEFINE_string("plots_dir", "plots", "Directory name to save the plots [plots]")

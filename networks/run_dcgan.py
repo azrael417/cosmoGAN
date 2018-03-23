@@ -12,6 +12,7 @@ def main():
     AP.add_argument("--use_larc", action='store_true')
     AP.add_argument("--epochs",type=int,default=50,help="Number of epochs to run")
     AP.add_argument("--trn_sz",type=int,default=-1,help="How many samples do you want to use for training? A small number can be used to help debug/overfit")
+    AP.add_argument("--dtype",type=str,default="fp32",choices=("fp32","fp16"),help="Data type for network")
     args = AP.parse_args()
 
     # datapath = '/global/cscratch1/sd/tkurth/gb2018/cosmoGAN/tfrecord/256'
@@ -31,6 +32,7 @@ def main():
     df_dim = 64
     # data_format = 'NCHW'
     data_format = 'NHWC'
+    data_type = args.dtype
     transpose_matmul_b = False
     verbose = True
     larc_string=""
@@ -48,11 +50,11 @@ def main():
             '--output_size %i --c_dim %i --experiment %s '\
             '--epoch %i --trn_sz %i --batch_size %i --learning_rate %f --num_updates %i %s --z_dim %i '\
             '--nd_layers %i --ng_layers %i --gf_dim %i --df_dim %i '\
-            '--data_format %s --transpose_matmul_b %s --%sverbose '\
+            '--data_format %s --data_type %s --transpose_matmul_b %s --%sverbose '\
             '--num_inter_threads %i --num_intra_threads %i'%(datapath, fs_type, output_size, c_dim, experiment,\
                                                              epoch, trn_sz, batch_size, learning_rate, n_up, larc_string, z_dim,\
                                                              nd_layers, ng_layers, gf_dim, df_dim,\
-                                                             data_format, transpose_matmul_b, ('' if verbose else 'no'), 1, 1)
+                                                             data_format, data_type, transpose_matmul_b, ('' if verbose else 'no'), 1, 1)
     
     if not os.path.isdir('output'):
         try:
@@ -66,7 +68,7 @@ def main():
         #proc = sp.Popen(shlex.split(command), stdout=f_out, stderr=sp.PIPE, env=my_env)
         #out, err = proc.communicate()
         #print(err)
-        sp.call(shlex.split(command), stdout=f_out)
+        sp.call(shlex.split(command))#, stdout=f_out)
 
 
 if __name__ == '__main__':

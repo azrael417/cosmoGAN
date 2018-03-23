@@ -11,7 +11,8 @@ class dcgan(object):
                  gradient_penalty_mode=True, gradient_penalty_lambda=10.,
                  nd_layers=4, ng_layers=4, df_dim=128, gf_dim=128, 
                  c_dim=1, z_dim=100, data_format="NHWC",
-                 gen_prior=tf.random_normal, transpose_b=False, distributed=True):
+                 gen_prior=tf.random_normal, transpose_b=False, distributed=True,
+                 dtype=None, custom_getter=None):
 
         self.output_size = output_size
         self.batch_size = batch_size
@@ -28,6 +29,8 @@ class dcgan(object):
         self.transpose_b = transpose_b # transpose weight matrix in linear layers for (possible) better performance when running on HSW/KNL
         self.stride = 2 # this is fixed for this architecture
         self.distributed = distributed
+        self.dtype = dtype
+        self.custom_getter = custom_getter
         self.n_stats = 1
 
         self._check_architecture_consistency()
@@ -39,7 +42,7 @@ class dcgan(object):
 
     def training_graph(self, images):
 
-        with tf.variable_scope("counters") as counters_scope:
+        with tf.variable_scope("counters", custom_getter=self.custom_getter) as counters_scope:
             self.epoch = tf.Variable(-1, name='epoch', trainable=False)
             self.increment_epoch = tf.assign(self.epoch, self.epoch+1)
             self.global_step = tf.train.get_or_create_global_step()
@@ -49,24 +52,27 @@ class dcgan(object):
         # else:
         #     self.images = tf.placeholder(tf.float32, [self.batch_size, self.c_dim, self.output_size, self.output_size], name='real_images')
 
-        self.z = self.gen_prior(shape=[self.batch_size, self.z_dim])
+        self.z = self.gen_prior(shape=[self.batch_size, self.z_dim],
+                                dtype=self.dtype)
 
-        with tf.variable_scope("critic") as c_scope:
+        with tf.variable_scope("critic", custom_getter=self.custom_getter) as c_scope:
             mean_critic_scores_real = tf.reduce_mean(self.critic(images, is_training=True))
 
-        with tf.variable_scope("generator") as g_scope:
+        with tf.variable_scope("generator", custom_getter=self.custom_getter) as g_scope:
             g_images = self.generator(self.z, is_training=True)
 
-        with tf.variable_scope("critic") as c_scope:
+        with tf.variable_scope("critic", custom_getter=self.custom_getter) as c_scope:
             c_scope.reuse_variables()
             mean_critic_scores_fake = tf.reduce_mean(self.critic(g_images, is_training=True))
 
             if self.gradient_penalty_mode:
-                epsilon = tf.random_uniform([self.batch_size, 1, 1, 1], minval=0., maxval=1.)
+                epsilon = tf.random_uniform([self.batch_size, 1, 1, 1],
+                                            dtype=self.dtype,
+                                            minval=0., maxval=1.)
                 interpolated = g_images + epsilon * (images - g_images)
                 critic_scores_interpolated = self.critic(interpolated, is_training=True)
 
-        with tf.name_scope("losses"):
+        with tf.variable_scope("losses", custom_getter=self.custom_getter):
             with tf.name_scope("critic"):
 
                 self.c_loss = -mean_critic_scores_real + mean_critic_scores_fake
@@ -77,6 +83,8 @@ class dcgan(object):
                     gradient_penalty = tf.reduce_mean(tf.square(slopes-1.))
 
                     gradient_penalty_rate = tf.train.exponential_decay(self.gradient_penalty_lambda, self.global_step, 40000, 0.96)
+                    if self.dtype != tf.float32:
+                        gradient_penalty_rate = tf.cast(gradient_penalty_rate, self.dtype)
                     self.c_loss += gradient_penalty_rate * gradient_penalty
 
 
@@ -104,13 +112,21 @@ class dcgan(object):
 
     def c_loss_average(self):
         if self.distributed:
-            return hvd.allreduce(self.c_loss)
+            if self.c_loss.dtype != tf.float32:
+                return tf.cast(hvd.allreduce(tf.cast(self.c_loss, tf.float32)),
+                               self.c_loss.dtype)
+            else:
+                return hvd.allreduce(self.c_loss)
         else:
             return self.c_loss
 
     def g_loss_average(self):
         if self.distributed:
-            return hvd.allreduce(self.g_loss)
+            if self.g_loss.dtype != tf.float32:
+                return tf.cast(hvd.allreduce(tf.cast(self.g_loss, tf.float32)),
+                               self.g_loss.dtype)
+            else:
+                return hvd.allreduce(self.g_loss)
         else:
             return self.g_loss
 
@@ -121,15 +137,15 @@ class dcgan(object):
         # else:
         #     self.images = tf.placeholder(tf.float32, [self.batch_size, self.c_dim, self.output_size, self.output_size], name='real_images')
 
-        self.z = tf.placeholder(tf.float32, [None, self.z_dim], name='z')
+        self.z = tf.placeholder(self.dtype, [None, self.z_dim], name='z')
 
-        with tf.variable_scope("discriminator") as d_scope:
+        with tf.variable_scope("discriminator", custom_getter=self.custom_getter) as d_scope:
             self.D = self.critic(images, is_training=False)
 
-        with tf.variable_scope("generator") as g_scope:
+        with tf.variable_scope("generator", custom_getter=self.custom_getter) as g_scope:
             self.G = self.generator(self.z, is_training=False)
 
-        with tf.variable_scope("counters") as counters_scope:
+        with tf.variable_scope("counters", custom_getter=self.custom_getter) as counters_scope:
             self.epoch = tf.Variable(-1, name='epoch', trainable=False)
             self.increment_epoch = tf.assign(self.epoch, self.epoch+1)
             self.global_step = tf.train.get_or_create_global_step()
@@ -138,14 +154,14 @@ class dcgan(object):
 
 
     def sampling_graph(self, n_samples=None):
-        self.z = tf.placeholder(tf.float32, [n_samples, self.z_dim], name='z')
+        self.z = tf.placeholder(self.dtype, [n_samples, self.z_dim], name='z')
 
-        with tf.variable_scope("generator") as scope:
+        with tf.variable_scope("generator", custom_getter=self.custom_getter) as scope:
             scope.reuse_variables()
             self.G = self.generator(self.z, is_training=False)
         
-        self.KS = tf.placeholder(tf.float32, (), name='statistics/KS')
-        with tf.variable_scope("statistics") as scope:
+        self.KS = tf.placeholder(self.dtype, (), name='statistics/KS')
+        with tf.variable_scope("statistics", custom_getter=self.custom_getter) as scope:
             self.KS_summary = tf.summary.merge([tf.summary.scalar("statistics/KS", self.KS)])
  
 

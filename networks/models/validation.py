@@ -82,7 +82,7 @@ def dump_samples(images, dump_path="./", tag=""):
                            gridspec_kw={'wspace':0.02, 'hspace':0.00})
     idx = np.random.randint(0, images.shape[0], 9)
     for i, a in zip(idx, ax.flatten()):
-        a.imshow(images[i])
+        a.imshow(images[i].astype(np.float32))
         a.axis("off")
     fig.suptitle(tag, fontsize=18)
     fig.subplots_adjust(top=0.95)

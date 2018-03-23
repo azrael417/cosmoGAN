@@ -15,13 +15,13 @@ from scipy import stats
 
 class decoder(object):
   
-  def __init__(self, output_shape, normalization=None):
+  def __init__(self, output_shape, dtype, normalization=None):
     self.output_shape = output_shape
     if normalization:
       self.minval, self.maxval = normalization
     else:
       self.minval, self.maxval = (0.,1.)
-      
+    self.dtype = dtype
       
   def decode(self, x):
     parsed_example = tf.parse_single_example(x,
@@ -30,14 +30,16 @@ class decoder(object):
                                              })
 
     example = tf.decode_raw(parsed_example['data_raw'],tf.float32)
+    if self.dtype != tf.float32:
+      example = tf.cast(example, self.dtype)
     example = 2* (tf.reshape(example,self.output_shape) - self.minval) / (self.maxval - self.minval) -1.
     return example
 
 
-def sample_tfrecords_to_numpy(tfrecords_filenames, img_size, sess_config, n_samples=1000, normalization=None):
+def sample_tfrecords_to_numpy(tfrecords_filenames, img_size, sess_config, dtype, n_samples=1000, normalization=None):
 
     #init decoder
-    dec = decoder((img_size, img_size), normalization=normalization)
+    dec = decoder((img_size, img_size), dtype=dtype, normalization=normalization)
 
     filenames = tf.placeholder(tf.string, shape=[None])
     dataset = tf.data.TFRecordDataset(filenames, buffer_size=n_samples*img_size*img_size*8)
@@ -66,6 +68,19 @@ def generate_samples(sess, dcgan, n_batches=20):
         
     return np.squeeze(samples)
 
+# custom getter ensures gradients/etc. remain stored/accumulated in FP32
+def float32_variable_storage_getter(getter, name, shape=None, dtype=None,
+                                    initializer=None, regularizer=None,
+                                    trainable=True,
+                                    *args, **kwargs):
+    storage_dtype = tf.float32 if trainable else dtype
+    variable = getter(name, shape, dtype=storage_dtype,
+                      initializer=initializer, regularizer=regularizer,
+                      trainable=trainable,
+                      *args, **kwargs)
+    if trainable and dtype != tf.float32:
+        variable = tf.cast(variable, dtype)
+    return variable
 
 def train_dcgan(datafiles, config):
     trn_datafiles, tst_datafiles = datafiles
@@ -87,9 +102,12 @@ def train_dcgan(datafiles, config):
 
     #horovod additions
     sess_config.gpu_options.visible_device_list = str(hvd.local_rank())
+
+    # choose our data type
+    dtype = tf.float16 if (config.data_type.lower() == 'fp16') else tf.float32
     
     # load test data
-    test_images = sample_tfrecords_to_numpy(tst_datafiles, config.output_size, sess_config, n_samples=num_test_samples, normalization=(config.pix_min, config.pix_max))
+    test_images = sample_tfrecords_to_numpy(tst_datafiles, config.output_size, sess_config, dtype, n_samples=num_test_samples, normalization=(config.pix_min, config.pix_max))
 
     # prepare plots dir
     plots_dir = os.path.join(config.plots_dir, config.experiment)
@@ -106,7 +124,7 @@ def train_dcgan(datafiles, config):
 
 
     # load test data
-    test_images = sample_tfrecords_to_numpy(tst_datafiles, config.output_size, sess_config, n_samples=1000, normalization=(config.pix_min, config.pix_max))
+    test_images = sample_tfrecords_to_numpy(tst_datafiles, config.output_size, sess_config, dtype, n_samples=1000, normalization=(config.pix_min, config.pix_max))
     dump_samples(test_images, dump_path=plots_dir, tag="real samples")
 
     training_graph = tf.Graph()
@@ -117,7 +135,7 @@ def train_dcgan(datafiles, config):
     with training_graph.as_default():
 
         #setup input pipeline
-        dec = decoder(output_shape=[config.output_size, config.output_size, config.c_dim], normalization=(config.pix_min, config.pix_max))
+        dec = decoder(output_shape=[config.output_size, config.output_size, config.c_dim], dtype=dtype, normalization=(config.pix_min, config.pix_max))
         filenames = tf.placeholder(tf.string, shape=[None])
         dataset = tf.data.TFRecordDataset(filenames, buffer_size=10*config.output_size*config.output_size*8)
         if hvd.size() > 1:
@@ -150,7 +168,9 @@ def train_dcgan(datafiles, config):
                           c_dim=config.c_dim,
                           z_dim=config.z_dim,
                           data_format=config.data_format,
-                          transpose_b=config.transpose_matmul_b)
+                          transpose_b=config.transpose_matmul_b,
+                          dtype=dtype,
+                          custom_getter=float32_variable_storage_getter)
 
         gan.training_graph(next_element)
         gan.sampling_graph()
