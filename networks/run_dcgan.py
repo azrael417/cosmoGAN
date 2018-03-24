@@ -29,7 +29,6 @@ def main():
     ng_layers = 4
     gf_dim = 64
     df_dim = 64
-    save_every_step = 'False'
     # data_format = 'NCHW'
     data_format = 'NHWC'
     transpose_matmul_b = False
@@ -48,11 +47,11 @@ def main():
     command = 'python -u -m models.main --dataset cosmo --datapath %s --fs_type %s '\
             '--output_size %i --c_dim %i --experiment %s '\
             '--epoch %i --trn_sz %i --batch_size %i --learning_rate %f --num_updates %i %s --z_dim %i '\
-            '--nd_layers %i --ng_layers %i --gf_dim %i --df_dim %i --save_every_step %s '\
+            '--nd_layers %i --ng_layers %i --gf_dim %i --df_dim %i '\
             '--data_format %s --transpose_matmul_b %s --%sverbose '\
             '--num_inter_threads %i --num_intra_threads %i'%(datapath, fs_type, output_size, c_dim, experiment,\
                                                              epoch, trn_sz, batch_size, learning_rate, n_up, larc_string, z_dim,\
-                                                             nd_layers, ng_layers, gf_dim, df_dim, save_every_step,\
+                                                             nd_layers, ng_layers, gf_dim, df_dim,\
                                                              data_format, transpose_matmul_b, ('' if verbose else 'no'), 1, 1)
     
     if not os.path.isdir('output'):

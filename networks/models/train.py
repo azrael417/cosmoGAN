@@ -210,27 +210,27 @@ def train_dcgan(datafiles, config):
                     _, c_sum = sess.run([d_update_op, gan.c_summary], feed_dict={handle: trn_handle})
                     #query global step
                     gstep = sess.run(gan.global_step)
-                    writer.add_summary(c_sum, gstep)
+                    #writer.add_summary(c_sum, gstep)
                     #generator update if requested
                     if gstep%config.num_updates == 0:
                       _, g_sum = sess.run([g_update_op, gan.g_summary], feed_dict={handle: trn_handle})
-                      writer.add_summary(g_sum, gstep)
+                      #writer.add_summary(g_sum, gstep)
 
-                    if gstep%200 == 0:
-                      # compute GAN evaluation stats
-                      g_images = generate_samples(sess, gan)
-                      stats = compute_evaluation_stats(g_images, test_images)
-                      #KS summary
-                      KS_summary = sess.run(gan.KS_summary, feed_dict={gan.KS:stats['KS']})
-                      stats_hist += [[gstep, epoch, time.time() - start_time, stats['KS']]]
+                    #if gstep%200 == 0:
+                    #  # compute GAN evaluation stats
+                    #  g_images = generate_samples(sess, gan)
+                    #  stats = compute_evaluation_stats(g_images, test_images)
+                    #  #KS summary
+                    #  KS_summary = sess.run(gan.KS_summary, feed_dict={gan.KS:stats['KS']})
+                    #  stats_hist += [[gstep, epoch, time.time() - start_time, stats['KS']]]
 
-                      if hvd.rank() == 0:
-                        print {k:v for k,v in stats.iteritems()}
-                        writer.add_summary(KS_summary, gstep)
-                        plot_pixel_histograms(g_images, test_images, dump_path=plots_dir, tag="step%d_epoch%d" % (gstep, gstep/num_batches_per_rank))
-                        dump_samples(g_images, dump_path="%s/step%d_epoch%d" % (plots_dir, gstep, gstep/num_batches_per_rank), tag="synthetic")
-                        np.savez("%s/stats_hist.npz" % plots_dir, np.array(stats_hist))
-                        np.savetxt("%s/stats_hist.csv" % plots_dir, np.array(stats_hist), fmt='%.4e', delimiter='\t')
+                    #  if hvd.rank() == 0:
+                    #    print {k:v for k,v in stats.iteritems()}
+                    #    writer.add_summary(KS_summary, gstep)
+                    #    plot_pixel_histograms(g_images, test_images, dump_path=plots_dir, tag="step%d_epoch%d" % (gstep, gstep/num_batches_per_rank))
+                    #    dump_samples(g_images, dump_path="%s/step%d_epoch%d" % (plots_dir, gstep, gstep/num_batches_per_rank), tag="synthetic")
+                    #    np.savez("%s/stats_hist.npz" % plots_dir, np.array(stats_hist))
+                    #    np.savetxt("%s/stats_hist.csv" % plots_dir, np.array(stats_hist), fmt='%.4e', delimiter='\t')
                       
                     #verbose printing
                     if config.verbose:
@@ -239,17 +239,25 @@ def train_dcgan(datafiles, config):
                         print("Epoch: [%2d] Step: [%4d/%4d] time: %4.4f, c_loss: %.8f, g_loss: %.8f" \
                             % (epoch, gstep, num_steps_per_rank, time.time() - start_time, errC, errG))
 
-                    elif gstep%100 == 0:
-                        print("Epoch: [%2d] Step: [%4d/%4d] time: %4.4f"%(epoch, gstep, num_batches_per_rank, time.time() - start_time))
+                    elif gstep%10 == 0:
+                        errC, errG = sess.run([gan.c_loss,gan.g_loss], feed_dict={handle: trn_handle})
+                        print("Epoch: [%2d] Step: [%4d/%4d] time: %4.4f, c_loss: %.8f, g_loss: %.8f" \
+                              % (epoch, gstep, num_batches_per_rank, time.time() - start_time, errC, errG))
 
                     # increment epoch counter
                     if gstep%num_batches_per_rank == 0:
                       epoch = sess.run(gan.increment_epoch)
                       g_images = generate_samples(sess, gan)
                       stats = compute_evaluation_stats(g_images, test_images)
+                      #KS summary
+                      KS_summary = sess.run(gan.KS_summary, feed_dict={gan.KS:stats['KS']})
+                      stats_hist += [[gstep, epoch, time.time() - start_time, stats['KS']]]
                       if hvd.rank() == 0:
                         print {k:v for k,v in stats.iteritems()}
+                        writer.add_summary(KS_summary, gstep)
                         plot_pixel_histograms(g_images, test_images, dump_path=plots_dir, tag="step%d_epoch%d" % (gstep, gstep/num_batches_per_rank))
+                        dump_samples(g_images, dump_path="%s/step%d_epoch%d" % (plots_dir, gstep, gstep/num_batches_per_rank), tag="synthetic")
+                        np.savez("%s/stats_hist.npz" % plots_dir, np.array(stats_hist))
                                
                 except tf.errors.OutOfRangeError:
                     break

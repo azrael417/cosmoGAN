@@ -17,7 +17,7 @@ parser.add_argument('--nd_layers', type=int, default=4)
 parser.add_argument('--epoch', type=int, default=25, help='number of epochs to train for')
 parser.add_argument('--LARC_eta', type=float, default=0.002, help='number of epochs to train for')
 parser.add_argument('--learning_rate', type=float, default=0.0002, help='number of epochs to train for')
-parser.add_argument('--use_larc', type=bool, default=True, help='number of epochs to train for')
+parser.add_argument('--use_larc', action='store_true', help='number of epochs to train for')
 
 opt = parser.parse_args()
 print("options")

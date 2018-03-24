@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH -J cosmogan_horovod
 #SBATCH -A g107
-#SBATCH -t 00:30:00
+#SBATCH -t 00:40:00
 #SBATCH -p normal
 #SBATCH -C gpu
 
