@@ -48,7 +48,7 @@ command = 'python -u -m models.main --dataset cosmo --datapath %s --fs_type %s '
           '--epoch %i --trn_sz %i --batch_size %i %s --z_dim %i '\
           '--nd_layers %i --ng_layers %i --gf_dim %i --df_dim %i --save_every_step %s '\
           '--data_format %s --transpose_matmul_b %s %s '\
-          '--num_inter_threads %i --num_intra_threads %i --LARC_eta %i --learning_rate %i'%(opt.datapath, opt.fs_type, opt.output_size, c_dim, experiment,\
+          '--num_inter_threads %i --num_intra_threads %i --LARC_eta %f --learning_rate %f'%(opt.datapath, opt.fs_type, opt.output_size, c_dim, experiment,\
            opt.epoch, opt.trn_sz, opt.batch_size, larc_flag, opt.z_dim,\
            opt.nd_layers, opt.ng_layers, opt.gf_dim, opt.df_dim, save_every_step,\
            data_format, transpose_matmul_b, verbose_flag, 2, 12, opt.LARC_eta, opt.learning_rate)

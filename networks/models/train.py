@@ -189,7 +189,7 @@ def train_dcgan(datafiles, config):
         if hvd.rank() == 0:
             print("Starting session with {} inter- and {} intra-threads".format(config.num_inter_threads, config.num_intra_threads))
         with tf.train.MonitoredTrainingSession(config=sess_config, hooks=hooks) as sess:
-            writer = tf.summary.FileWriter('./logs/'+config.experiment+'/train', sess.graph)
+            #writer = tf.summary.FileWriter('./logs/'+config.experiment+'/train', sess.graph)
 
             sess.run([init_op, init_local_op])
   
@@ -211,13 +211,13 @@ def train_dcgan(datafiles, config):
             while not sess.should_stop():           
                 try:
                     #critic update
-                    _, c_sum = sess.run([d_update_op, gan.c_summary], feed_dict={handle: trn_handle})
+                    sess.run([d_update_op], feed_dict={handle: trn_handle})
                     #query global step
                     gstep = sess.run(gan.global_step)
                     #writer.add_summary(c_sum, gstep)
                     #generator update if requested
                     if gstep%config.num_updates == 0:
-                      _, g_sum = sess.run([g_update_op, gan.g_summary], feed_dict={handle: trn_handle})
+                      sess.run([g_update_op], feed_dict={handle: trn_handle})
                       #writer.add_summary(g_sum, gstep)
 
                     #if gstep%200 == 0:
@@ -258,7 +258,7 @@ def train_dcgan(datafiles, config):
                       stats_hist += [[gstep, epoch, time.time() - start_time, stats['KS']]]
                       if hvd.rank() == 0:
                         print {k:v for k,v in stats.iteritems()}
-                        writer.add_summary(KS_summary, gstep)
+                        #writer.add_summary(KS_summary, gstep)
                         plot_pixel_histograms(g_images, test_images, dump_path=plots_dir, tag="step%d_epoch%d" % (gstep, gstep/num_batches_per_rank))
                         dump_samples(g_images, dump_path="%s/step%d_epoch%d" % (plots_dir, gstep, gstep/num_batches_per_rank), tag="synthetic")
                         np.savez("%s/stats_hist.npz" % plots_dir, np.array(stats_hist))
