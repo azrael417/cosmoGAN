@@ -70,8 +70,7 @@ def plot_pixel_histograms(fake, test, dump_path="./", tag=""):
 
   #plt.savefig('%s/pixel_intensity.jpg'%plots_dir,bbox_inches='tight', format='jpg')
   plt.savefig('%s/pixel_intensity.pdf'%plots_dir,bbox_inches='tight', format='pdf')
-  fig.close()
-
+  plt.close('all')
 
 def dump_samples(images, dump_path="./", tag=""):
 
@@ -91,4 +90,4 @@ def dump_samples(images, dump_path="./", tag=""):
     #            bbox_inches='tight', pad_inches=0, format='jpg')
     #fig.savefig('%s/%s.eps'%(dump_path, tag.replace(" ", "_")),
     #            bbox_inches='tight', pad_inches=0, format='eps')
-    fig.close()
+    plt.close('all')

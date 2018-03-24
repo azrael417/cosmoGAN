@@ -20,10 +20,14 @@ export OMP_PROC_BIND=spread
 export CRAY_CUDA_MPS=1
 export MPICH_RDMA_ENABLED_CUDA=1
 
+#files per node
+fpn=256
+numfiles=$(( ${SLURM_NNODES} * ${fpn} ))
+
 #run training
 srun -N ${SLURM_NNODES} -n ${SLURM_NNODES} -c 24 -u python -u ../networks/run_dcgan_daint.py \
         --fs_type global \
-        --trn_sz 100 \
+        --trn_sz ${numfiles} \
 	--z_dim=100 \
 	--gf_dim=64 \
 	--gf_dim=64 \
