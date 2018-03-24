@@ -23,6 +23,7 @@ export MPICH_RDMA_ENABLED_CUDA=1
 #run training
 srun -N ${SLURM_NNODES} -n ${SLURM_NNODES} -c 24 -u python -u ../networks/run_dcgan_daint.py \
         --fs_type global \
+        --trn_sz 100 \
 	--z_dim=100 \
 	--gf_dim=64 \
 	--gf_dim=64 \

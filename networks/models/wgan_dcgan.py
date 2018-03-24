@@ -102,6 +102,18 @@ class dcgan(object):
 
         self.saver = tf.train.Saver(max_to_keep=8000)
 
+    def c_loss_average(self):
+        if self.distributed:
+            return hvd.allreduce(self.c_loss)
+        else:
+            return self.c_loss
+
+    def g_loss_average(self):
+        if self.distributed:
+            return hvd.allreduce(self.g_loss)
+        else:
+            return self.g_loss
+
     def inference_graph(self, images):
 
         # if self.data_format == "NHWC":

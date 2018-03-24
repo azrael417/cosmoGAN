@@ -18,6 +18,7 @@ parser.add_argument('--epoch', type=int, default=25, help='number of epochs to t
 parser.add_argument('--LARC_eta', type=float, default=0.002, help='number of epochs to train for')
 parser.add_argument('--learning_rate', type=float, default=0.0002, help='number of epochs to train for')
 parser.add_argument('--use_larc', action='store_true', help='number of epochs to train for')
+parser.add_argument("--trn_sz",type=int,default=-1,help="How many samples do you want to use for training? A small number can be used to help debug/overfit")
 
 opt = parser.parse_args()
 print("options")
@@ -26,9 +27,9 @@ print(opt)
 c_dim = 1
 save_every_step = 'False'
 # data_format = 'NCHW'
-data_format = 'NHWC'
+data_format = 'NCHW'
 transpose_matmul_b = False
-verbose = 'True'
+verbose_flag = ""
 nodeid = int(os.environ['SLURM_PROCID'])
 numnodes = int(os.environ['SLURM_NNODES'])
 
@@ -44,13 +45,13 @@ experiment = 'cosmo-new-3_%i_batchSize%i_'\
 
 command = 'python -u -m models.main --dataset cosmo --datapath %s --fs_type %s '\
           '--output_size %i --c_dim %i --experiment %s '\
-          '--epoch %i --batch_size %i %s --z_dim %i '\
+          '--epoch %i --trn_sz %i --batch_size %i %s --z_dim %i '\
           '--nd_layers %i --ng_layers %i --gf_dim %i --df_dim %i --save_every_step %s '\
-          '--data_format %s --transpose_matmul_b %s --verbose %s '\
+          '--data_format %s --transpose_matmul_b %s %s '\
           '--num_inter_threads %i --num_intra_threads %i --LARC_eta %i --learning_rate %i'%(opt.datapath, opt.fs_type, opt.output_size, c_dim, experiment,\
-           opt.epoch, opt.batch_size, larc_flag, opt.z_dim,\
+           opt.epoch, opt.trn_sz, opt.batch_size, larc_flag, opt.z_dim,\
            opt.nd_layers, opt.ng_layers, opt.gf_dim, opt.df_dim, save_every_step,\
-           data_format, transpose_matmul_b, verbose, 2, 12, opt.LARC_eta, opt.learning_rate)
+           data_format, transpose_matmul_b, verbose_flag, 2, 12, opt.LARC_eta, opt.learning_rate)
 
 if not os.path.isdir('output'):
     os.mkdir('output')

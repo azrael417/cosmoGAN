@@ -181,6 +181,10 @@ def train_dcgan(datafiles, config):
         init_op = tf.global_variables_initializer()
         init_local_op = tf.local_variables_initializer()
         init_restore = hvd.broadcast_global_variables(0)
+
+        #some convenience functions
+        c_loss_avg = gan.c_loss_average()
+        g_loss_avg = gan.g_loss_average()
  
         if hvd.rank() == 0:
             print("Starting session with {} inter- and {} intra-threads".format(config.num_inter_threads, config.num_intra_threads))
@@ -234,13 +238,13 @@ def train_dcgan(datafiles, config):
                       
                     #verbose printing
                     if config.verbose:
-                        errC, errG = sess.run([gan.c_loss,gan.g_loss], feed_dict={handle: trn_handle})
+                        errC, errG = sess.run([c_loss_avg,g_loss_avg], feed_dict={handle: trn_handle})
 
                         print("Epoch: [%2d] Step: [%4d/%4d] time: %4.4f, c_loss: %.8f, g_loss: %.8f" \
                             % (epoch, gstep, num_steps_per_rank, time.time() - start_time, errC, errG))
 
                     elif gstep%10 == 0:
-                        errC, errG = sess.run([gan.c_loss,gan.g_loss], feed_dict={handle: trn_handle})
+                        errC, errG = sess.run([c_loss_avg,g_loss_avg], feed_dict={handle: trn_handle})
                         print("Epoch: [%2d] Step: [%4d/%4d] time: %4.4f, c_loss: %.8f, g_loss: %.8f" \
                               % (epoch, gstep, num_batches_per_rank, time.time() - start_time, errC, errG))
 
