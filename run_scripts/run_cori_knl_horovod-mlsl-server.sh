@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH -q regular
 #SBATCH -C knl
-#SBATCH -t 2:00:00
+#SBATCH -t 0:59:00
 #SBATCH --gres=craynetwork:2
 #SBATCH -J cosmogan_horovod_mlsl
 
