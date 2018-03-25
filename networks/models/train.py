@@ -166,8 +166,8 @@ def train_dcgan(datafiles, config):
         sess_config.gpu_options.visible_device_list = str(hvd.local_rank())
         hooks = []
 
-        #stop hook
-        hooks.append(tf.train.StopAtStepHook(last_step=num_steps_per_rank))
+        #stop hook: add 1 as regularizer
+        hooks.append(tf.train.StopAtStepHook(last_step=num_steps_per_rank+1))
 
         checkpoint_dir = os.path.join(config.checkpoint_dir, config.experiment)
 

@@ -5,6 +5,7 @@ import numpy as np
 import pprint
 import os
 import glob
+import random as rnd
 
 # limit tensorflow spewage to just warnings and errors
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '1'
@@ -48,6 +49,10 @@ config = flags.FLAGS
 def get_data_files(trn_sz, compute_stat=True):
     train_data_files = glob.glob(config.datapath + "/*train*.tfrecords")
     valid_data_files = glob.glob(config.datapath + "/*test*.tfrecords")
+
+    #do initial shuffling
+    train_data_files = rnd.shuffle(train_data_files)
+    valid_data_files = rnd.shuffle(valid_data_files)
 
     if trn_sz > 0:
         # scale the validation data files down accordingly
