@@ -21,14 +21,23 @@ export CRAY_CUDA_MPS=1
 export MPICH_RDMA_ENABLED_CUDA=1
 
 #files per node
-fpn=256
-numfiles=$(( ${SLURM_NNODES} * ${fpn} ))
+datadir=/scratch/snx3000/tkurth/data/cosmoGAN/tfrecord/256
+scratchdir=/dev/shm/$(whoami)
+train_per_node=256
+test_per_node=64
+
+#clean up
+rm -f ${scratchdir}
+scratchdir=${scratchdir}/cosmoGAN
+rm -f ${scratchdir}
 
 #run training
+srun -N ${SLURM_NNODES} -n ${SLURM_NNODES} -c 24 ./parallel_stagein.sh ${datadir}/train ${scratchdir} ${train_per_node}
+srun -N ${SLURM_NNODES} -n ${SLURM_NNODES} -c 24 ./parallel_stagein.sh ${datadir}/test ${scratchdir} ${test_per_node}
 srun -N ${SLURM_NNODES} -n ${SLURM_NNODES} -c 24 -u python -u ../networks/run_dcgan_daint.py \
-        --fs_type global \
+        --datapath ${scratchdir} \
+        --fs_type local \
         --epoch 2 \
-        --trn_sz ${numfiles} \
 	--z_dim=100 \
 	--gf_dim=64 \
 	--gf_dim=64 \

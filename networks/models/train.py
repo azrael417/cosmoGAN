@@ -40,8 +40,8 @@ def sample_tfrecords_to_numpy(tfrecords_filenames, img_size, sess_config, n_samp
     dec = decoder((img_size, img_size), normalization=normalization)
 
     filenames = tf.placeholder(tf.string, shape=[None])
-    dataset = tf.data.TFRecordDataset(filenames)
-    dataset = dataset.map(lambda x: dec.decode(x))  # Parse the record into tensors.
+    dataset = tf.data.TFRecordDataset(filenames, buffer_size=n_samples*img_size*img_size*8)
+    dataset = dataset.map(lambda x: dec.decode(x), num_parallel_calls=4)  # Parse the record into tensors.
     dataset = dataset.repeat(1)  # Repeat the input indefinitely.
     dataset = dataset.batch(n_samples)
     iterator = dataset.make_initializable_iterator()
@@ -72,12 +72,12 @@ def train_dcgan(datafiles, config):
     num_files = len(trn_datafiles)
     #comput enumber of batches and stuff
     num_samples_per_rank = config.num_records_total // hvd.size()
-    num_batches_per_rank = num_samples_per_rank // config.batch_size
-    num_steps_per_rank = config.epoch * num_batches_per_rank
+    num_steps_per_rank_per_epoch = num_samples_per_rank // config.batch_size
+    num_steps_per_rank = config.epoch * num_steps_per_rank_per_epoch
     num_test_samples = np.min([len(tst_datafiles),1000])
 
     if hvd.rank() == 0:
-      print("Found {} samples per rank. Using batch size {} and max epoch count {}, that gives {} number of total steps.".format(num_samples_per_rank, config.batch_size, config.epoch,num_steps_per_rank))
+      print("Found {} samples per rank. Using batch size {} and max epoch count {}, that gives {} number of total steps per rank.".format(num_samples_per_rank, config.batch_size, config.epoch,num_steps_per_rank))
 
     #session config
     sess_config=tf.ConfigProto(inter_op_parallelism_threads=config.num_inter_threads,
@@ -119,11 +119,14 @@ def train_dcgan(datafiles, config):
         #setup input pipeline
         dec = decoder(output_shape=[config.output_size, config.output_size, config.c_dim], normalization=(config.pix_min, config.pix_max))
         filenames = tf.placeholder(tf.string, shape=[None])
-        dataset = tf.data.TFRecordDataset(filenames)
+        dataset = tf.data.TFRecordDataset(filenames, buffer_size=10*config.output_size*config.output_size*8)
         if hvd.size() > 1:
-            dataset = dataset.shard(hvd.size(), hvd.rank())
+            if config.fs_type == "global":
+              dataset = dataset.shard(hvd.size(), hvd.rank())
+            else:
+              dataset = dataset.shard(hvd.local_size(), hvd.local_rank())
         dataset = dataset.shuffle(config.batch_size*10)
-        dataset = dataset.map(lambda x: dec.decode(x))  # Parse the record into tensors.
+        dataset = dataset.map(lambda x: dec.decode(x), num_parallel_calls=4)  # Parse the record into tensors.
         # make sure all batches are equal in size
         dataset = dataset.apply(tf.contrib.data.batch_and_drop_remainder(config.batch_size))
         dataset = dataset.repeat(config.epoch)  # Repeat the input indefinitely.
@@ -172,7 +175,7 @@ def train_dcgan(datafiles, config):
         checkpoint_dir = os.path.join(config.checkpoint_dir, config.experiment)
 
         if hvd.rank() == 0:
-          checkpoint_save_freq = num_batches_per_rank * 2
+          checkpoint_save_freq = num_steps_per_rank_per_epoch * 2
           checkpoint_saver = gan.saver
           hooks.append(tf.train.CheckpointSaverHook(checkpoint_dir=checkpoint_dir, save_steps=checkpoint_save_freq, saver=checkpoint_saver))
 
@@ -237,19 +240,20 @@ def train_dcgan(datafiles, config):
                     #    np.savetxt("%s/stats_hist.csv" % plots_dir, np.array(stats_hist), fmt='%.4e', delimiter='\t')
                       
                     #verbose printing
+                    gstep_in_epoch = gstep%num_steps_per_rank_per_epoch if gstep%num_steps_per_rank_per_epoch > 0 else num_steps_per_rank_per_epoch
                     if config.verbose:
                         errC, errG = sess.run([c_loss_avg,g_loss_avg], feed_dict={handle: trn_handle})
 
                         print("Epoch: [%2d] Step: [%4d/%4d] time: %4.4f, c_loss: %.8f, g_loss: %.8f" \
-                            % (epoch, gstep, num_steps_per_rank, time.time() - start_time, errC, errG))
+                            % (epoch, gstep_in_epoch, num_steps_per_rank_per_epoch, time.time() - start_time, errC, errG))
 
                     elif gstep%10 == 0:
                         errC, errG = sess.run([c_loss_avg,g_loss_avg], feed_dict={handle: trn_handle})
                         print("Epoch: [%2d] Step: [%4d/%4d] time: %4.4f, c_loss: %.8f, g_loss: %.8f" \
-                              % (epoch, gstep, num_batches_per_rank, time.time() - start_time, errC, errG))
+                              % (epoch, gstep_in_epoch, num_steps_per_rank_per_epoch, time.time() - start_time, errC, errG))
 
                     # increment epoch counter
-                    if gstep%num_batches_per_rank == 0:
+                    if gstep%num_steps_per_rank_per_epoch == 0:
                       epoch = sess.run(gan.increment_epoch)
                       g_images = generate_samples(sess, gan)
                       stats = compute_evaluation_stats(g_images, test_images)
@@ -259,8 +263,8 @@ def train_dcgan(datafiles, config):
                       if hvd.rank() == 0:
                         print {k:v for k,v in stats.iteritems()}
                         #writer.add_summary(KS_summary, gstep)
-                        plot_pixel_histograms(g_images, test_images, dump_path=plots_dir, tag="step%d_epoch%d" % (gstep, gstep/num_batches_per_rank))
-                        dump_samples(g_images, dump_path="%s/step%d_epoch%d" % (plots_dir, gstep, gstep/num_batches_per_rank), tag="synthetic")
+                        plot_pixel_histograms(g_images, test_images, dump_path=plots_dir, tag="step%d_epoch%d" % (gstep, gstep/num_steps_per_rank_per_epoch))
+                        dump_samples(g_images, dump_path="%s/step%d_epoch%d" % (plots_dir, gstep, gstep/num_steps_per_rank_per_epoch), tag="synthetic")
                         np.savez("%s/stats_hist.npz" % plots_dir, np.array(stats_hist))
                                
                 except tf.errors.OutOfRangeError:

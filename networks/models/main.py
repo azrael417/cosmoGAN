@@ -51,8 +51,8 @@ def get_data_files(trn_sz, compute_stat=True):
     valid_data_files = glob.glob(config.datapath + "/*test*.tfrecords")
 
     #do initial shuffling
-    train_data_files = rnd.shuffle(train_data_files)
-    valid_data_files = rnd.shuffle(valid_data_files)
+    rnd.shuffle(train_data_files)
+    rnd.shuffle(valid_data_files)
 
     if trn_sz > 0:
         # scale the validation data files down accordingly
