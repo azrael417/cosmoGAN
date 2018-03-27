@@ -51,7 +51,7 @@ command = 'python -u -m models.main --dataset cosmo --datapath %s --fs_type %s '
           '--num_inter_threads %i --num_intra_threads %i --LARC_eta %f --learning_rate %f'%(opt.datapath, opt.fs_type, opt.output_size, c_dim, experiment,\
            opt.epoch, opt.trn_sz, opt.batch_size, larc_flag, opt.z_dim,\
            opt.nd_layers, opt.ng_layers, opt.gf_dim, opt.df_dim, save_every_step,\
-           data_format, transpose_matmul_b, verbose_flag, 2, 12, opt.LARC_eta, opt.learning_rate)
+           data_format, transpose_matmul_b, verbose_flag, 6, 12, opt.LARC_eta, opt.learning_rate)
 
 if not os.path.isdir('output'):
     os.mkdir('output')

@@ -127,6 +127,7 @@ def train_dcgan(datafiles, config):
               dataset = dataset.shard(hvd.local_size(), hvd.local_rank())
         dataset = dataset.shuffle(config.batch_size*10)
         dataset = dataset.map(lambda x: dec.decode(x), num_parallel_calls=4)  # Parse the record into tensors.
+        dataset = dataset.prefetch(config.batch_size*4)
         # make sure all batches are equal in size
         dataset = dataset.apply(tf.contrib.data.batch_and_drop_remainder(config.batch_size))
         dataset = dataset.repeat(config.epoch)  # Repeat the input indefinitely.
@@ -211,16 +212,19 @@ def train_dcgan(datafiles, config):
             epoch = sess.run(gan.increment_epoch)
             start_time = time.time()
 
+            errG = 0
             while not sess.should_stop():           
                 try:
                     #critic update
-                    sess.run([d_update_op], feed_dict={handle: trn_handle})
+                    errC, _ = sess.run([ c_loss_avg, d_update_op ],
+                                       feed_dict={handle: trn_handle})
                     #query global step
                     gstep = sess.run(gan.global_step)
                     #writer.add_summary(c_sum, gstep)
                     #generator update if requested
                     if gstep%config.num_updates == 0:
-                      sess.run([g_update_op], feed_dict={handle: trn_handle})
+                      errG, _ = sess.run([ g_loss_avg, g_update_op ],
+                                         feed_dict={handle: trn_handle})
                       #writer.add_summary(g_sum, gstep)
 
                     #if gstep%200 == 0:
@@ -242,13 +246,13 @@ def train_dcgan(datafiles, config):
                     #verbose printing
                     gstep_in_epoch = gstep%num_steps_per_rank_per_epoch if gstep%num_steps_per_rank_per_epoch > 0 else num_steps_per_rank_per_epoch
                     if config.verbose:
-                        errC, errG = sess.run([c_loss_avg,g_loss_avg], feed_dict={handle: trn_handle})
+                        #errC, errG = sess.run([c_loss_avg,g_loss_avg], feed_dict={handle: trn_handle})
 
                         print("Epoch: [%2d] Step: [%4d/%4d] time: %4.4f, c_loss: %.8f, g_loss: %.8f" \
                             % (epoch, gstep_in_epoch, num_steps_per_rank_per_epoch, time.time() - start_time, errC, errG))
 
                     elif gstep%10 == 0:
-                        errC, errG = sess.run([c_loss_avg,g_loss_avg], feed_dict={handle: trn_handle})
+                        #errC, errG = sess.run([c_loss_avg,g_loss_avg], feed_dict={handle: trn_handle})
                         print("Epoch: [%2d] Step: [%4d/%4d] time: %4.4f, c_loss: %.8f, g_loss: %.8f" \
                               % (epoch, gstep_in_epoch, num_steps_per_rank_per_epoch, time.time() - start_time, errC, errG))
 
