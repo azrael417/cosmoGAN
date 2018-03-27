@@ -54,7 +54,7 @@ def main():
             '--num_inter_threads %i --num_intra_threads %i'%(datapath, fs_type, output_size, c_dim, experiment,\
                                                              epoch, trn_sz, batch_size, learning_rate, n_up, larc_string, z_dim,\
                                                              nd_layers, ng_layers, gf_dim, df_dim,\
-                                                             data_format, data_type, transpose_matmul_b, ('' if verbose else 'no'), 1, 1)
+                                                             data_format, data_type, transpose_matmul_b, ('' if verbose else 'no'), 5, 1)
     
     if not os.path.isdir('output'):
         try:
