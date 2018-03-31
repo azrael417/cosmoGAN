@@ -65,7 +65,7 @@ def train_dcgan(data, config):
                                    allow_soft_placement=True)
 
         #horovod additions
-        sess_config.gpu_options.visible_device_list = str(mc.get_rank())
+        sess_config.gpu_options.visible_device_list = str(0)
         hooks = [BcastTensors()]
         
         #stop hook
