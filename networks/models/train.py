@@ -22,7 +22,7 @@ class BcastTensors(tf.train.SessionRunHook):
             new_vars   = mc.broadcast(tf.trainable_variables(),0)
             self.bcast = tf.group(*[tf.assign(v,new_vars[k]) for k,v in enumerate(tf.trainable_variables())])
 
-    def after_create_session(self, session, coord, validate_init=True):
+    def after_create_session(self, session, coord, validate_init=False):
         session.run(self.bcast)
 
         if validate_init:
