@@ -32,8 +32,8 @@ save_every_step = 'False'
 data_format = 'NCHW'
 transpose_matmul_b = False
 verbose_flag = ""
-nodeid =  os.environ.get('SLURM_PROCID',0)
-numnodes =  os.environ.get('SLURM_NNODES',1)
+nodeid =  int(os.environ.get('SLURM_PROCID','0'))
+numnodes =  int(os.environ.get('SLURM_NNODES','1'))
 
 if opt.use_larc:
     larc_flag="--use_larc"
@@ -43,7 +43,7 @@ else:
     larc_string=""
 
 experiment = '%scosmo-new-3_%i_batchSize%i_'\
-             'nd%i_ng%i_gfdim%i_dfdim%i_zdim%i_%snodes%i_rank%i_LARCeta%2.4f_LR%2.4f'%(opt.prefix,opt.output_size, opt.batch_size, opt.nd_layers, opt.ng_layers, opt.gf_dim, opt.df_dim, opt.z_dim, larc_string, numnodes, nodeid, opt.LARC_eta, opt.learning_rate)
+             'nd%i_ng%i_gfdim%i_dfdim%i_zdim%i_%snodes%i_rank%i_LARCeta%2.4f_LR%2.4f'%(opt.prefix, opt.output_size, opt.batch_size, opt.nd_layers, opt.ng_layers, opt.gf_dim, opt.df_dim, opt.z_dim, larc_string, numnodes, nodeid, opt.LARC_eta, opt.learning_rate)
 
 command = 'python -u -m models.main --dataset cosmo --datapath %s --fs_type %s '\
           '--output_size %i --c_dim %i --experiment %s '\
