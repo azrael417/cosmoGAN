@@ -5,6 +5,7 @@ import argparse
 
 parser = argparse.ArgumentParser()
 
+parser.add_argument('--prefix', help='prefix for experiment name',default='')
 parser.add_argument('--datapath', help='path to dataset', default='/scratch/snx3000/tkurth/data/cosmoGAN/tfrecord/256')
 parser.add_argument("--fs_type",default="global",type=str,help="FS type")
 parser.add_argument('--batch_size', type=int, default=64, help='input batch size')
@@ -19,7 +20,8 @@ parser.add_argument('--LARC_eta', type=float, default=0.002, help='number of epo
 parser.add_argument('--learning_rate', type=float, default=0.0002, help='number of epochs to train for')
 parser.add_argument('--use_larc', action='store_true', help='number of epochs to train for')
 parser.add_argument("--trn_sz",type=int,default=-1,help="How many samples do you want to use for training? A small number can be used to help debug/overfit")
-
+parser.add_argument('--num_inter_threads', type=int, default=1, help='number of concurrent tasks')
+parser.add_argument('--num_intra_threads', type=int, default=1, help='number of threads per tasks')
 opt = parser.parse_args()
 print("options")
 print(opt)
@@ -30,8 +32,8 @@ save_every_step = 'False'
 data_format = 'NCHW'
 transpose_matmul_b = False
 verbose_flag = ""
-nodeid = int(os.environ['SLURM_PROCID'])
-numnodes = int(os.environ['SLURM_NNODES'])
+nodeid =  os.environ.get('SLURM_PROCID',0)
+numnodes =  os.environ.get('SLURM_NNODES',1)
 
 if opt.use_larc:
     larc_flag="--use_larc"
@@ -40,8 +42,8 @@ else:
     larc_flag=""
     larc_string=""
 
-experiment = 'cosmo-new-3_%i_batchSize%i_'\
-             'nd%i_ng%i_gfdim%i_dfdim%i_zdim%i_%snodes%i_rank%i_LARCeta%2.4f_LR%2.4f'%(opt.output_size, opt.batch_size, opt.nd_layers, opt.ng_layers, opt.gf_dim, opt.df_dim, opt.z_dim, larc_string, numnodes, nodeid, opt.LARC_eta, opt.learning_rate)
+experiment = '%scosmo-new-3_%i_batchSize%i_'\
+             'nd%i_ng%i_gfdim%i_dfdim%i_zdim%i_%snodes%i_rank%i_LARCeta%2.4f_LR%2.4f'%(opt.prefix,opt.output_size, opt.batch_size, opt.nd_layers, opt.ng_layers, opt.gf_dim, opt.df_dim, opt.z_dim, larc_string, numnodes, nodeid, opt.LARC_eta, opt.learning_rate)
 
 command = 'python -u -m models.main --dataset cosmo --datapath %s --fs_type %s '\
           '--output_size %i --c_dim %i --experiment %s '\
@@ -51,7 +53,7 @@ command = 'python -u -m models.main --dataset cosmo --datapath %s --fs_type %s '
           '--num_inter_threads %i --num_intra_threads %i --LARC_eta %f --learning_rate %f'%(opt.datapath, opt.fs_type, opt.output_size, c_dim, experiment,\
            opt.epoch, opt.trn_sz, opt.batch_size, larc_flag, opt.z_dim,\
            opt.nd_layers, opt.ng_layers, opt.gf_dim, opt.df_dim, save_every_step,\
-           data_format, transpose_matmul_b, verbose_flag, 6, 12, opt.LARC_eta, opt.learning_rate)
+           data_format, transpose_matmul_b, verbose_flag, opt.num_inter_threads, opt.num_intra_threads, opt.LARC_eta, opt.learning_rate)
 
 if not os.path.isdir('output'):
     os.mkdir('output')
