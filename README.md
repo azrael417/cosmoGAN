@@ -31,6 +31,9 @@ sbatch -N <num_nodes> run_<arch>_horovod.sh
 ```
 Note that the code employs one thread per physical core. If this is to be changed, please modify the run scripts accordingly.
 
+## Rules
+The batch size and network parameters in `run_dcgan_*.py` in the networks directory should not be touched, the run scripts in the `run_scripts` directory can be modified as needed. For example, the number of MPI processes per socket/device can be changed, the number of threads, total concurrency, etc..
+
 ## Results
 
 On Edison with plain Tensorflow and Horovod built cray-mpich 7.6.2, you should see the following performance
