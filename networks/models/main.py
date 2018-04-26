@@ -18,6 +18,7 @@ flags.DEFINE_integer("ng_layers", 4, "Number of generator conv_T layers. [4]")
 flags.DEFINE_integer("gf_dim", 64, "Dimension of gen filters in last conv layer. [64]")
 flags.DEFINE_integer("df_dim", 64, "Dimension of discrim filters in first conv layer. [64]")
 flags.DEFINE_integer("batch_size", 64, "The size of batch images [64]")
+flags.DEFINE_boolean("batch_size_is_global", False, "Specifies that the stated batch size is global [False]")
 flags.DEFINE_integer("output_size", 64, "The size of the output images to produce [64]")
 flags.DEFINE_integer("c_dim", 1, "Dimension of image color. [1]")
 flags.DEFINE_string("data_format", "NHWC", "data format [NHWC]")
@@ -37,6 +38,11 @@ def main(_):
     #print and start training
     print("Initializing cosmoGAN")
     pprint.PrettyPrinter().pprint(config.__flags)
+
+    #if batch size is global, normalize:
+    if config.batch_size_is_global:
+        config.batch_size = config.batch_size // hvd.size()
+
     train.train_dcgan(get_data(), config)
 
 def get_data():
