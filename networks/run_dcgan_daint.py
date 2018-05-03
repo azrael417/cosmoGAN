@@ -28,8 +28,8 @@ print(opt)
 
 c_dim = 1
 save_every_step = 'False'
-# data_format = 'NCHW'
-data_format = 'NCHW'
+data_format = 'NHWC'
+#data_format = 'NCHW'
 transpose_matmul_b = False
 verbose_flag = ""
 nodeid =  int(os.environ.get('SLURM_PROCID','0'))
