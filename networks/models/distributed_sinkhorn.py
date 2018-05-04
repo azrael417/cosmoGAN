@@ -44,48 +44,29 @@ def compute_distance(batch_x, batch_y):
     return np.clip(result, a_min=0., a_max=1.)
 
 
-#distributed matmul: lhs_jn = sum_k amat_jk * rhs_kn
-#assumes balanced matrix, i.e.  total_rows = rows(amat)*comm_topo.comm_row_size and the same for columns
-#the input and output vectors are supposed to be available on every node
-def loc_glob_dist_multiply(comm_topo, amat, rhs, transpose=False):
-    #some metadata stuff
-    row = comm_topo.comm_row_rank
-    col = comm_topo.comm_col_rank
-    shapevals = amat.shape
-    num_local_rows = shapevals[0]
-    num_local_cols = shapevals[1]
+#multiplies local matrix with local diagonal matrix where only the diagonal is stored
+def loc_loc_dist_diag_multiply(comm_topo, loc_mat, loc_vec, from_left=False):
     
-    #create lhs
-    if transpose:
-        loc_lhs = np.zeros(num_local_cols, dtype=dtype)
-        loc_lhs_tmp = np.zeros(num_local_cols, dtype=dtype)
+    #walk through rhs vector and check if the components are on the local node, if yes, fill them in
+    if from_left:
+        #rhsmat:
+        diag = np.diag(loc_vec)
+        if diag.ndim == 1:
+            diag = np.expand_dims(diag, axis=0)
+        
+        #allocate result buffer:
+        loc_res = np.matmul(diag, loc_mat)
+        
     else:
-        loc_lhs = np.zeros(num_local_rows, dtype=dtype)
-        loc_lhs_tmp = np.zeros(num_local_rows, dtype=dtype)
-    
-    #slice the input tensor
-    if transpose:
-        loc_rhs = rhs[row*num_local_rows:(row+1)*num_local_rows]
-        loc_lhs_tmp = np.matmul(np.transpose(amat), np.expand_dims(loc_rhs, axis=1))
-    else:
-        loc_rhs = rhs[col*num_local_cols:(col+1)*num_local_cols]
-        loc_lhs_tmp = np.matmul(amat, np.expand_dims(loc_rhs, axis=1))
-    
-    #reduce over all ranks in the row comm
-    if transpose:
-        comm_topo.comm_col.Allreduce(loc_lhs_tmp, loc_lhs, op=MPI.SUM)
-    else:
-        comm_topo.comm_row.Allreduce(loc_lhs_tmp, loc_lhs, op=MPI.SUM)
-    
-    #do alltoall to communicate the columns
-    if transpose:
-        lhs = np.zeros(num_local_cols*comm_topo.comm_col_size, dtype=dtype)
-        comm_topo.comm_row.Allgather([loc_lhs, num_local_cols, mpidtype], [lhs, num_local_cols, mpidtype])
-    else:
-        lhs = np.zeros(num_local_rows*comm_topo.comm_row_size, dtype=dtype)
-        comm_topo.comm_col.Allgather([loc_lhs, num_local_rows, mpidtype], [lhs, num_local_rows, mpidtype])
-    
-    return lhs
+        #rhsmat:
+        diag = np.diag(loc_vec)
+        if diag.ndim == 1:
+            diag = np.expand_dims(diag, axis=1)
+        
+        #allocate result buffer:
+        loc_res = np.matmul(loc_mat, diag)
+            
+    return loc_res
 
 
 #distributed matmul: lhs_jn = sum_k amat_jk * rhs_kn
@@ -98,26 +79,35 @@ def loc_loc_dist_multiply(comm_topo, loc_amat, loc_rhs, transpose=False):
     shapevals = loc_amat.shape
     num_local_rows = shapevals[0]
     num_local_cols = shapevals[1]
+    #check if rhs needs to be expanded
+    expand = False
+    if loc_rhs.ndim == 1:
+       loc_rhs = np.expand_dims(loc_rhs, axis=1)
+       expand = True
+    nsize = loc_rhs.shape[1]
     
     #create lhs
     if transpose:
-        loc_lhs = np.zeros(num_local_cols, dtype=dtype)
-        loc_lhs_tmp = np.zeros(num_local_cols, dtype=dtype)
+        loc_lhs = np.zeros((num_local_cols,nsize), dtype=dtype)
+        loc_lhs_tmp = np.zeros((num_local_cols,nsize), dtype=dtype)
     else:
-        loc_lhs = np.zeros(num_local_rows, dtype=dtype)
-        loc_lhs_tmp = np.zeros(num_local_rows, dtype=dtype)
+        loc_lhs = np.zeros((num_local_rows,nsize), dtype=dtype)
+        loc_lhs_tmp = np.zeros((num_local_rows,nsize), dtype=dtype)
     
     #slice the input tensor
     if transpose:
-        loc_lhs_tmp = np.matmul(np.transpose(loc_amat), np.expand_dims(loc_rhs, axis=1))
+        loc_lhs_tmp = np.matmul(np.transpose(loc_amat), loc_rhs)
     else:
-        loc_lhs_tmp = np.matmul(loc_amat, np.expand_dims(loc_rhs, axis=1))
+        loc_lhs_tmp = np.matmul(loc_amat, loc_rhs)
     
     #reduce over all ranks in the row comm
     if transpose:
         comm_topo.comm_col.Allreduce(loc_lhs_tmp, loc_lhs, op=MPI.SUM)
     else:
         comm_topo.comm_row.Allreduce(loc_lhs_tmp, loc_lhs, op=MPI.SUM)
+    
+    if expand:
+        loc_lhs = np.squeeze(loc_lhs)
     
     return loc_lhs
     
@@ -131,15 +121,14 @@ def distributed_sinkhorn(comm_topo, loc_amat, lambd, tolerance, min_iters, max_i
     size = comm_topo.comm_row_size*loc_row_size
     assert(comm_topo.comm_col_size*loc_col_size==size)
     
-    
     #condition K and create vectors for final results
     loc_kmat = np.exp(-lambd*loc_amat.astype(np.float64)).astype(dtype)
     
     #init uvec and vvec
-    loc_uvec = np.ones(loc_row_size, dtype=dtype)
-    loc_vvec = np.ones(loc_col_size, dtype=dtype)
-    loc_uvecp = np.zeros(loc_row_size, dtype=dtype)
-    loc_vvecp = np.zeros(loc_col_size, dtype=dtype)
+    loc_uvec = np.ones((loc_row_size,1), dtype=dtype)
+    loc_vvec = np.ones((loc_col_size,1), dtype=dtype)
+    loc_uvecp = np.zeros((loc_row_size,1), dtype=dtype)
+    loc_vvecp = np.zeros((loc_col_size,1), dtype=dtype)
     
     #difference
     normdiff = 2.*tolerance
@@ -170,9 +159,47 @@ def distributed_sinkhorn(comm_topo, loc_amat, lambd, tolerance, min_iters, max_i
         
         if comm_topo.comm_rank==0:
             print(iters,normdiff)
-            
-    #get the interesting fraction of the matrix:
-    #print(uvec,vvec)
+    
+    #squeeze the additional dimension out of the vector
+    loc_vvec = np.squeeze(loc_vvec, axis=1)
+    loc_uvec = np.squeeze(loc_uvec, axis=1)
+    
+    ##DEBUG
+    ##gather kmat
+    #local_row_start = comm_topo.comm_row_rank*comm_topo.local_row_size
+    #local_row_end = (comm_topo.comm_row_rank+1)*comm_topo.local_row_size
+    #local_col_start = comm_topo.comm_col_rank*comm_topo.local_col_size
+    #local_col_end = (comm_topo.comm_col_rank+1)*comm_topo.local_col_size
+    #kmat = np.zeros((size,size),dtype)
+    #kmat_tmp = np.zeros((size,size),dtype)
+    #kmat_tmp[local_row_start:local_row_end,local_col_start:local_col_end]=loc_kmat[...]
+    #comm_topo.comm.Allreduce(kmat_tmp,kmat,op=MPI.SUM)
+    ##gather the vectors:
+    #vvec = np.zeros((size),dtype)
+    #comm_topo.comm_row.Allgather(loc_vvec,vvec)
+    #uvec = np.zeros((size),dtype)
+    #comm_topo.comm_col.Allgather(loc_uvec,uvec)
+    ##multiply
+    #kmat = np.matmul(np.diag(uvec),np.matmul(kmat,np.diag(vvec)))
+    #if comm_topo.comm_rank==0:
+    #    print(kmat)
+    ##print("(%i %i)"%(comm_topo.comm_row_rank,comm_topo.comm_col_rank),loc_kmat)
+    ##DEBUG
+    
+    #generate mapping matrix
+    loc_kmat = loc_loc_dist_diag_multiply(comm_topo, loc_kmat, loc_vvec, from_left=False)
+    loc_kmat = loc_loc_dist_diag_multiply(comm_topo, loc_kmat, loc_uvec, from_left=True)
+    
+    ##DEBUG
+    #kmat[...] = 0.
+    #kmat_tmp[...] = 0.
+    #kmat_tmp[local_row_start:local_row_end,local_col_start:local_col_end]=loc_kmat[...]
+    #comm_topo.comm.Allreduce(kmat_tmp,kmat,op=MPI.SUM)
+    #if comm_topo.comm_rank==0:
+    #    print(kmat, np.sum(kmat,axis=0),np.sum(kmat,axis=1))
+    ##DEBUG
+    
+    return loc_kmat
 
 
 #main function
@@ -194,12 +221,14 @@ def main(config):
     comm_size = comm.Get_size()
     comm_rank = comm.Get_rank()
     comm_topo = comm_utils(comm, comm_size, comm_rank, comm_row_size, comm_col_size)
+    comm_topo.local_row_size = local_row_size
+    comm_topo.local_col_size = local_col_size
     
     #local ranges
-    local_row_start = comm_topo.comm_row_rank*local_row_size
-    local_row_end = (comm_topo.comm_row_rank+1)*local_row_size
-    local_col_start = comm_topo.comm_col_rank*local_col_size
-    local_col_end = (comm_topo.comm_col_rank+1)*local_col_size
+    local_row_start = comm_topo.comm_row_rank*comm_topo.local_row_size
+    local_row_end = (comm_topo.comm_row_rank+1)*comm_topo.local_row_size
+    local_col_start = comm_topo.comm_col_rank*comm_topo.local_col_size
+    local_col_end = (comm_topo.comm_col_rank+1)*comm_topo.local_col_size
     
     #create two big random vectors
     np.random.seed(1234)
@@ -217,19 +246,8 @@ def main(config):
     cmatrix_tmp[local_row_start:local_row_end, local_col_start:local_col_end]=loc_cmatrix[...]
     comm_topo.comm.Allreduce(cmatrix_tmp, cmatrix, op=MPI.SUM)
     
-    #create global vector and multiply matrix with the vector
-    #rhs = np.random.rand(config.rank).astype(dtype)
-    #multiply
-    #lhs = loc_glob_dist_multiply(comm_topo, loc_cmatrix, rhs, transpose=False)
-    
-    #execute the code
-    #if comm_topo.comm_rank == 0:
-    #    lhs_singlenode = np.squeeze(np.matmul(cmatrix, np.expand_dims(rhs,axis=1)))
-    #    print(lhs,lhs_singlenode)
-    #    print(np.linalg.norm(lhs-lhs_singlenode,ord=2))
-    
     #run sinkhorn
-    distributed_sinkhorn(comm_topo, loc_cmatrix, 1., 0.0001, 20, 100)
+    mapping = distributed_sinkhorn(comm_topo, loc_cmatrix, 1., 0.0001, 20, 100)
     
     
 if __name__ == "__main__":
