@@ -7,6 +7,7 @@ except:
 import models.train as train
 import numpy as np
 import pprint
+from ops import comm_utils
 
 flags = tf.app.flags
 flags.DEFINE_string("model", "dcgan", "dcgan/cramer_dcgan [dcgan]")
@@ -24,7 +25,7 @@ flags.DEFINE_integer("nd_layers", 4, "Number of discriminator convolutional laye
 flags.DEFINE_integer("ng_layers", 4, "Number of generator conv_T layers. [4]")
 flags.DEFINE_integer("gf_dim", 64, "Dimension of gen filters in last conv layer. [64]")
 flags.DEFINE_integer("df_dim", 64, "Dimension of discrim filters in first conv layer. [64]")
-flags.DEFINE_integer("batch_size", 64, "The size of batch images [64]")
+flags.DEFINE_integer("batch_size", 64, "The size of batch images per node [64]")
 flags.DEFINE_integer("output_size", 64, "The size of the output images to produce [64]")
 flags.DEFINE_integer("c_dim", 1, "Dimension of image color. [1]")
 flags.DEFINE_string("data_format", "NHWC", "data format [NHWC]")
@@ -39,27 +40,51 @@ flags.DEFINE_integer("num_intra_threads", 4, "number of threads per task [4]")
 flags.DEFINE_integer("comm_size", 1, "number of ranks [1]")
 flags.DEFINE_integer("comm_rank", 0, "mpi rank id [0]")
 flags.DEFINE_integer("comm_local_rank", 0, "node-local mpi rank id [0]")
+flags.DEFINE_integer("num_row_ranks", 1, "Number of row ranks [1]")
+flags.DEFINE_integer("num_col_ranks", 1, "Number of column ranks [1]")
 config = flags.FLAGS
 
 def main(_):
     #init horovod
-    config.comm_size = 1
-    config.comm_rank = 0
-    config.comm_local_rank = 0
-    if use_horovod:
-        hvd.init()
-        config.comm_size = hvd.size()
-        config.comm_rank = hvd.rank()
-        config.comm_local_rank = hvd.local_rank()
-       
+    assert(use_horovod)
+    hvd.init()
+    config.comm_size = hvd.size()
+    config.comm_rank = hvd.rank()
+    config.comm_local_rank = hvd.local_rank()
+    #create topological comm
+    # Make sure MPI is not re-initialized.
+    import mpi4py.rc
+    mpi4py.rc.initialize = False
+    from mpi4py import MPI
+    #make sure sizes are correct
+    assert hvd.size() == MPI.COMM_WORLD.Get_size()
+    
+    #do some sanity checking
+    #number of total ranks is a product of row and column ranks
+    assert( config.comm_size == config.num_row_ranks * config.num_col_ranks )
+    #for the moment, assert square topology
+    assert( config.num_row_ranks == config.num_col_ranks )
+    #create topological communicator
+    #size of comm grid
+    comm_row_size = config.num_row_ranks
+    comm_col_size = config.num_col_ranks
+    local_row_size = config.batch_size
+    local_col_size = config.batch_size
+    
+    #get rank and comm size info
+    comm = MPI.COMM_WORLD
+    comm_size = comm.Get_size()
+    comm_rank = comm.Get_rank()
+    comm_topo = comm_utils(comm, comm_size, comm_rank, comm_row_size, comm_col_size)
+    comm_topo.local_row_size = local_row_size
+    comm_topo.local_col_size = local_col_size
+    
     pprint.PrettyPrinter().pprint(config.__flags)
 
-    if config.model == 'dcgan':
-        train.train_dcgan(get_data(), config)
-    elif config.model == 'otgan':
-        train.train_otgan(get_data(), config)
+    if config.model == 'otgan':
+        train.train_otgan(comm_topo, get_data(), config)
     else:
-        train.train_cramer_dcgan(get_data(), config)
+        raise ValueError("Error, only OT-GAN training supported.")
 
 def get_data():
     data = np.load(config.datafile, mmap_mode='r')

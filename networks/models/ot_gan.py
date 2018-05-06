@@ -5,18 +5,20 @@ try:
 except:
     use_horovd = False
     
-from .ops import linear, conv2d, conv2d_transpose, lrelu, ot_distance
+from .ops import linear, conv2d, conv2d_transpose, lrelu, compute_cost, ot_distance
 
 
 class ot_gan(object):
-    def __init__(self, output_size=64, batch_size=64, 
+    def __init__(self, comm_topo, output_size=64, batch_size=64, 
                  nd_layers=4, ng_layers=4, df_dim=128, gf_dim=128, 
                  c_dim=1, z_dim=100, d_out_dim=256, gradient_lambda=10., 
                  data_format="NHWC",
-                 gen_prior=tf.random_normal, transpose_b=False):
+                 gen_prior="normal", transpose_b=False):
 
+        self.comm_topo = comm_topo
         self.output_size = output_size
         self.batch_size = batch_size
+        self.global_batch_size = comm_topo.num_row_ranks * self.batch_size
         self.nd_layers = nd_layers
         self.ng_layers = ng_layers
         self.df_dim = df_dim
@@ -27,6 +29,7 @@ class ot_gan(object):
         self.gradient_lambda = gradient_lambda
         self.data_format = data_format
         self.gen_prior = gen_prior
+        self.rng = np.random.RandomState(1234567)
         self.transpose_b = transpose_b # transpose weight matrix in linear layers for (possible) better performance when running on HSW/KNL
         self.stride = 2 # this is fixed for this architecture
 
@@ -35,45 +38,57 @@ class ot_gan(object):
         self.batchnorm_kwargs = {'epsilon' : 1e-5, 'decay': 0.9, 
                                  'updates_collections': None, 'scale': True,
                                  'fused': True, 'data_format': self.data_format}
-
+                                 
     def training_graph(self):
         
         #real input images
         if self.data_format == "NHWC":
-            self.images_1 = tf.placeholder(tf.float32, [self.batch_size, self.output_size, self.output_size, self.c_dim], name='real_images-1')
-            self.images_2 = tf.placeholder(tf.float32, [self.batch_size, self.output_size, self.output_size, self.c_dim], name='real_images-2')
+            self.xr = tf.placeholder(tf.float32, [self.batch_size, self.output_size, self.output_size, self.c_dim], name='real_images-1')
+            self.xrp = tf.placeholder(tf.float32, [self.batch_size, self.output_size, self.output_size, self.c_dim], name='real_images-2')
         else:
-            self.images_1 = tf.placeholder(tf.float32, [self.batch_size, self.c_dim, self.output_size, self.output_size], name='real_images-1')
-            self.images_2 = tf.placeholder(tf.float32, [self.batch_size, self.c_dim, self.output_size, self.output_size], name='real_images-2')
+            self.xr = tf.placeholder(tf.float32, [self.batch_size, self.c_dim, self.output_size, self.output_size], name='real_images-1')
+            self.xrp = tf.placeholder(tf.float32, [self.batch_size, self.c_dim, self.output_size, self.output_size], name='real_images-2')
+            
+        #register the mapping matrices as placeholders
+        self.map_hxr_hxg = tf.placeholder(tf.float32, [self.batch_size, self.batch_size], name="map_hxr_hxg")
+        self.map_hxr_hxgp = tf.placeholder(tf.float32, [self.batch_size, self.batch_size], name="map_hxr_hxgp")
+        self.map_hxrp_hxg = tf.placeholder(tf.float32, [self.batch_size, self.batch_size], name="map_hxrp_hxg")
+        self.map_hxrp_hxgp = tf.placeholder(tf.float32, [self.batch_size, self.batch_size], name="map_hxrp_hxgp")
+        self.map_hxr_hxrp = tf.placeholder(tf.float32, [self.batch_size, self.batch_size], name="map_hxr_hxrp")
+        self.map_hxg_hxgp = tf.placeholder(tf.float32, [self.batch_size, self.batch_size], name="map_hxg_hxgp")
         
-        #seeds for fake images
-        self.z = self.gen_prior(shape=[self.batch_size, self.z_dim], dtype=tf.float32)
-        self.zp = self.gen_prior(shape=[self.batch_size, self.z_dim], dtype=tf.float32)
+        #seeds for fake images. Make these placeholders at well because we need to store the random vectors:
+        self.z = tf.placeholder(tf.float32, [self.batch_size, self.z_dim], name='z_prior')
+        self.zp = tf.placeholder(tf.float32, [self.batch_size, self.z_dim], name='zp_prior')
         
         # discriminator
         h = self.discriminator
         
         # pipe through discriminator
-        xr = self.images_1
-        xrp = self.images_2
         xg = self.generator(self.z, is_training=True)
         xgp = self.generator(self.zp, is_training=True)
         
         #apply disc
-        hxr = h(xr, True)
-        hxrp = h(xrp, True)
-        hxg = h(xg, True)
-        hxgp = h(xgp, True)
+        self.hxr = h(xr, True)
+        self.hxrp = h(xrp, True)
+        self.hxg = h(xg, True)
+        self.hxgp = h(xgp, True)
         
-        #compute the optimal transport metric:
-        tolerance = 0.00001
-        min_iters = 20
-        w_xr_xg = ot_distance(hxr, hxg, tolerance, min_iters)
-        w_xr_xgp = ot_distance(hxr, hxgp, tolerance, min_iters)
-        w_xrp_xg = ot_distance(hxrp, hxg, tolerance, min_iters)
-        w_xrp_xgp = ot_distance(hxrp, hxgp, tolerance, min_iters)
-        w_xr_xrp = ot_distance(hxr, hxrp, tolerance, min_iters)
-        w_xg_xgp = ot_distance(hxg, hxgp, tolerance, min_iters)
+        #generate cost matrices
+        self.c_hxr_hxg = compute_cost(hxr, hxg)
+        self.c_hxr_hxgp = compute_cost(hxr, hxgp)
+        self.c_hxrp_hxg = compute_cost(hxrp, hxg)
+        self.c_hxrp_hxgp = compute_cost(hxrp, hxgp)
+        self.c_hxr_hxrp = compute_cost(hxr, hxrp)
+        self.c_hxg_hxgp = compute_cost(hxg, hxgp)
+        
+        #compute the individual losses
+        w_xr_xg = ot_distance(self.c_hxr_hxg, self.map_hxr_hxg)
+        w_xr_xgp = ot_distance(self.c_hxr_hxgp, self.map_hxr_hxgp)
+        w_xrp_xg = ot_distance(self.c_hxrp_hxg, self.map_hxrp_hxg)
+        w_xrp_xgp = ot_distance(self.c_hxrp_hxgp, self.map_hxrp_hxgp)
+        w_xr_xrp = ot_distance(self.c_hxrp_hxgp, self.map_hxr_hxrp)
+        w_xg_xgp = ot_distance(self.c_hxg_hxgp, self.map_hxg_hxgp)
         
         #defining loss
         with tf.name_scope("loss"):
@@ -185,6 +200,12 @@ class ot_gan(object):
             hn = linear(tf.reshape(chain, [self.batch_size, -1]), self.d_out_dim, 'h%i_lin'%self.nd_layers, transpose_b=self.transpose_b)
             
             return hn
+
+    def generate_prior():
+        if self.gen_prior == "normal":
+            return rng.normal(shape=(self.batch_size, self.z_dim)).astype(np.float32)
+        else:
+            raise ValueError("Error, only normal distributed random numbers are supported at the moment.")
 
 
     def _tensor_data_format(self, N, H, W, C):

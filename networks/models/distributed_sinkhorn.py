@@ -113,7 +113,7 @@ def loc_loc_dist_multiply(comm_topo, loc_amat, loc_rhs, transpose=False):
     
 
 #Sinkhorm algorithm to compute optimal mapping: lambda \in [0,\infty[ is regularizer, r is starting guess (could be random vector)
-def distributed_sinkhorn(comm_topo, loc_amat, lambd, tolerance, min_iters, max_iters):
+def distributed_sinkhorn(comm_topo, loc_amat, lambd, tolerance, min_iters, max_iters, verbose=False):
     
     #extract size
     loc_row_size = loc_amat.shape[0]
@@ -157,8 +157,8 @@ def distributed_sinkhorn(comm_topo, loc_amat, lambd, tolerance, min_iters, max_i
         normdiff = np.sqrt(loc_u_normdiff) + np.sqrt(loc_v_normdiff)
         iters += 1
         
-        if comm_topo.comm_rank==0:
-            print(iters,normdiff)
+        if comm_topo.comm_rank==0 and verbose:
+            print("Sinkhorn norm difference after %i iterations: %f"%(iters,normdiff))
     
     #squeeze the additional dimension out of the vector
     loc_vvec = np.squeeze(loc_vvec, axis=1)

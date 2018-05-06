@@ -82,51 +82,74 @@ def lrelu(x, alpha=0.2, name="lrelu"):
       return tf.maximum(x, alpha*x)
 
 
-#Sinkhorn metric: do not back-propagate through here
-def sk_iteration_body(amat, rvec, cvec, rvecp, cvecp, iters, tolerance, min_iters):
-    #backup previous
-    rvecp = rvec
-    cvecp = cvec
-    #update
-    cvec = 1./tf.matmul(tf.matrix_transpose(amat),rvec)
-    rvec = 1./tf.matmul(amat,cvec)
-    iters+=1
-    return amat, rvec, cvec, rvecp, cvecp, iters, tolerance, min_iters
-
-
-def sk_is_converged(amat, rvec, cvec, rvecp, cvecp, iters, tolerance, min_iters):
-    normdiff = tf.norm(rvec-rvecp,ord=2)+tf.norm(cvec-cvecp,ord=2)
-    return tf.logical_and( tf.logical_or( tf.greater_equal(normdiff, tolerance), tf.less_equal(iters,min_iters) ), tf.less_equal(iters,10*min_iters) )
-
-
-def compute_mapping(amat, tolerance, min_iters):
-    #size:
-    size = amat.shape[0]
-    evec = tf.ones((size,1), dtype=tf.float32)
-    iters = tf.zeros((), dtype=tf.int32)
+#comm utils for distributed sinkhorn
+class comm_utils(object):
     
-    #create vectors
-    rvec = evec
-    cvec = evec
-    rvecp = tf.zeros((size,1))
-    cvecp = tf.zeros((size,1))
-    #fixed point iteration
-    _, rvec, cvec, _, _, _, _, _ = tf.while_loop(sk_is_converged, 
-                                                 sk_iteration_body, 
-                                                 loop_vars=[amat, rvec, cvec, rvecp, cvecp, iters, tolerance, min_iters], 
-                                                 parallel_iterations=1,
-                                                 back_prop=False)
-    
-    #squeeze result
-    rvec = tf.squeeze(rvec)
-    cvec = tf.squeeze(cvec)
-    #construct pmat
-    pmat = tf.matmul(tf.matmul(tf.diag(rvec),amat),tf.diag(cvec))
-    
-    return pmat
+    def __init__(self, comm, comm_size, comm_rank, comm_row_size, comm_col_size):
+        if comm_row_size * comm_col_size != comm_size:
+            raise ValueError("Error, comm_row_size * comm_col_size has to be comm_size")
+        
+        #copy input
+        self.comm = comm
+        self.comm_size = comm_size
+        self.comm_rank = comm_rank
+        self.comm_row_size = comm_row_size
+        self.comm_col_size = comm_col_size
+        
+        #compute my row and column rank: we set rank = col_rank + num_cols * row_rank
+        self.comm_col_rank = self.comm_rank % self.comm_col_size
+        self.comm_row_rank = (self.comm_rank - self.comm_col_rank) // self.comm_col_size
+        
+        #split comms
+        self.comm_row = comm.Split(color=self.comm_row_rank, key=self.comm_col_rank)
+        self.comm_col = comm.Split(color=self.comm_col_rank, key=self.comm_row_rank)
 
 
-def compute_distance(batch_x, batch_y):
+##Sinkhorn metric: do not back-propagate through here
+#def sk_iteration_body(amat, rvec, cvec, rvecp, cvecp, iters, tolerance, min_iters):
+#    #backup previous
+#    rvecp = rvec
+#    cvecp = cvec
+#    #update
+#    cvec = 1./tf.matmul(tf.matrix_transpose(amat),rvec)
+#    rvec = 1./tf.matmul(amat,cvec)
+#    iters+=1
+#    return amat, rvec, cvec, rvecp, cvecp, iters, tolerance, min_iters
+#
+#
+#def sk_is_converged(amat, rvec, cvec, rvecp, cvecp, iters, tolerance, min_iters):
+#    normdiff = tf.norm(rvec-rvecp,ord=2)+tf.norm(cvec-cvecp,ord=2)
+#    return tf.logical_and( tf.logical_or( tf.greater_equal(normdiff, tolerance), tf.less_equal(iters,min_iters) ), tf.less_equal(iters,10*min_iters) )
+#
+#
+#def compute_mapping(amat, tolerance, min_iters):
+#    #size:
+#    size = amat.shape[0]
+#    evec = tf.ones((size,1), dtype=tf.float32)
+#    iters = tf.zeros((), dtype=tf.int32)
+#    
+#    #create vectors
+#    rvec = evec
+#    cvec = evec
+#    rvecp = tf.zeros((size,1))
+#    cvecp = tf.zeros((size,1))
+#    #fixed point iteration
+#    _, rvec, cvec, _, _, _, _, _ = tf.while_loop(sk_is_converged, 
+#                                                 sk_iteration_body, 
+#                                                 loop_vars=[amat, rvec, cvec, rvecp, cvecp, iters, tolerance, min_iters], 
+#                                                 parallel_iterations=1,
+#                                                 back_prop=False)
+#    
+#    #squeeze result
+#    rvec = tf.squeeze(rvec)
+#    cvec = tf.squeeze(cvec)
+#    #construct pmat
+#    pmat = tf.matmul(tf.matmul(tf.diag(rvec),amat),tf.diag(cvec))
+#    
+#    return pmat
+
+
+def compute_cost(batch_x, batch_y):
     "compute distance matrix 1.-x*y/(|x|_2*|y|_2)"
     #compute numerator
     numerator = tf.matmul(batch_x, tf.matrix_transpose(batch_y))
@@ -139,18 +162,9 @@ def compute_distance(batch_x, batch_y):
     return 1.-numerator/denominator
 
 
-def ot_distance(batch_x, batch_y, tolerance, min_iters):
-    #create untrainable variable for the mapping
-    mmat = tf.Variable(tf.zeros((batch_x.shape[0],batch_y.shape[0]), dtype=tf.float32), trainable=False)
-    #distance matrix 
-    cmat = compute_distance(batch_x, batch_y)
-    #compute the mapping
-    mmat_tmp = compute_mapping(cmat, tolerance, min_iters)
-    with tf.control_dependencies([cmat, mmat_tmp]):
-        assign_op = tf.assign(mmat, mmat_tmp)
-    
-    with tf.control_dependencies([assign_op]):
-        loss = tf.trace(tf.matmul(mmat, tf.matrix_transpose(cmat)))
+def ot_distance(c_x_y, map_x_y):
+    #compute the local costs:
+    local_loss = tf.reduce_sum(map_x_y, c_x_y)
     
     #compute the loss
-    return loss
+    return local_loss
