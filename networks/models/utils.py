@@ -1,5 +1,25 @@
 import os
 import tensorflow as tf
+import numpy as np
+
+def get_data(filename, fformat):
+    data = np.load(filename, mmap_mode='r')
+
+    #number of samples
+    num_samples = data.shape[0]
+
+    #everybody loads everything
+    num_samples_per_rank = num_samples
+    start = 0
+    end = num_samples
+    data = data[start:end,:,:]
+
+    if fformat == 'NHWC':
+        data = np.expand_dims(data, axis=-1)
+    else: # 'NCHW'
+        data = np.expand_dims(data, axis=1)
+
+    return data
 
 def save_checkpoint(sess, saver, tag, checkpoint_dir, counter, step=False):
 

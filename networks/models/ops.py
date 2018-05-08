@@ -159,12 +159,16 @@ def compute_cost(batch_x, batch_y):
     #denominator is the dyadic product of the two norm vectors
     denominator = tf.matmul(denominator_x, denominator_y)
     #return result
-    return 1.-numerator/denominator
+    result = 1.-numerator/denominator
+    #clip result
+    result = tf.clip_by_value(result, clip_value_min=0., clip_value_max=1.)
+    #return
+    return result
 
 
 def ot_distance(c_x_y, map_x_y):
     #compute the local costs:
-    local_loss = tf.reduce_sum(map_x_y, c_x_y)
+    local_loss = tf.reduce_sum(map_x_y * c_x_y)
     
     #compute the loss
     return local_loss

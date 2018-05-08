@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH -q premium
+#SBATCH -q regular
 #SBATCH -A nstaff
 #SBATCH -C knl
 #SBATCH -t 4:00:00
@@ -11,7 +11,13 @@
 #module load gcc/6.3.0
 
 #add this to library path:
-module load tensorflow/intel-horovod-mpi-head
+module load gcc/7.1.0
+module load python/3.6-anaconda-4.4
+source activate thorstendl-horovod
+export MPICH_MAX_THREAD_SAFETY=multiple
+export MPICH_VERSION_DISPLAY=1
+
+#module load tensorflow/intel-horovod-mpi-head
 #modulebase=$(dirname $(module show tensorflow/intel-head 2>&1 | grep PATH |awk '{print $3}'))
 export PYTHONPATH=$(pwd)/../networks  #:${modulebase}/lib/python2.7/site-packages:${PYTHONPATH}
 

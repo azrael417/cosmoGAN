@@ -1,19 +1,18 @@
 import tensorflow as tf
-use_horovod = True
-try:
-    import horovod.tensorflow as hvd
-except:
-    use_horovod = False
+import horovod.tensorflow as hvd
 import models.train as train
 import numpy as np
 import pprint
+from utils import get_data
 from ops import comm_utils
 
 flags = tf.app.flags
 flags.DEFINE_string("model", "dcgan", "dcgan/cramer_dcgan [dcgan]")
 flags.DEFINE_string("dataset", "cosmo", "The name of dataset [cosmo]")
-flags.DEFINE_string("datafile", "data/cosmo_primary_64_1k_train.npy", "Input data file for cosmo")
+flags.DEFINE_string("train_datafile", "data/cosmo_primary_64_1k_train.npy", "Input data file for cosmo training")
+flags.DEFINE_string("test_datafile", "data/cosmo_primary_64_1k_test.npy", "Input data file for cosmo testing")
 flags.DEFINE_integer("epoch", 25, "Epoch to train [25]")
+flags.DEFINE_integer("print_frequency", 10, "Print and evaluate pixel intensities after how many steps [10]")
 flags.DEFINE_float("learning_rate", 0.0002, "Learning rate of for adam [0.0002]")
 flags.DEFINE_integer("n_up", 1, "Number of discriminator updates per generator update [1]")
 flags.DEFINE_float("beta1", 0.5, "Momentum term of adam [0.5]")
@@ -30,6 +29,7 @@ flags.DEFINE_integer("output_size", 64, "The size of the output images to produc
 flags.DEFINE_integer("c_dim", 1, "Dimension of image color. [1]")
 flags.DEFINE_string("data_format", "NHWC", "data format [NHWC]")
 flags.DEFINE_boolean("transpose_matmul_b", False, "Transpose matmul B matrix for performance [False]")
+flags.DEFINE_string("plots_dir", "plots", "Directory name to save the plots [plots]")
 flags.DEFINE_string("checkpoint_dir", "checkpoints", "Directory name to save the checkpoints [checkpoint]")
 flags.DEFINE_string("experiment", "run_0", "Tensorboard run directory name [run_0]")
 flags.DEFINE_boolean("save_every_step", False, "Save a checkpoint after every step [False]")
@@ -46,7 +46,6 @@ config = flags.FLAGS
 
 def main(_):
     #init horovod
-    assert(use_horovod)
     hvd.init()
     config.comm_size = hvd.size()
     config.comm_rank = hvd.rank()
@@ -82,32 +81,9 @@ def main(_):
     pprint.PrettyPrinter().pprint(config.__flags)
 
     if config.model == 'otgan':
-        train.train_otgan(comm_topo, get_data(), config)
+        train.train_otgan(comm_topo, get_data(config.train_datafile, config.data_format), config)
     else:
         raise ValueError("Error, only OT-GAN training supported.")
-
-def get_data():
-    data = np.load(config.datafile, mmap_mode='r')
-
-    #make sure that each node only works on its chunk of the data
-    num_samples = data.shape[0]
-    if use_horovod:
-        num_ranks = hvd.size()
-        comm_rank = hvd.rank()
-    else:
-        num_ranks = 1
-        comm_rank = 0
-    num_samples_per_rank = num_samples // num_ranks
-    start = num_samples_per_rank*comm_rank
-    end = np.min([num_samples_per_rank*(comm_rank+1),num_samples])
-    data = data[start:end,:,:]
-
-    if config.data_format == 'NHWC':
-        data = np.expand_dims(data, axis=-1)
-    else: # 'NCHW'
-        data = np.expand_dims(data, axis=1)
-
-    return data
 
 if __name__ == '__main__':
     tf.app.run()

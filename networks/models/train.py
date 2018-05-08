@@ -2,18 +2,27 @@ import os
 import time
 import numpy as np
 import tensorflow as tf
-use_horovod = True
-try:
-    import horovod.tensorflow as hvd
-except:
-    use_horovod = False
+import horovod.tensorflow as hvd
     
 import models.dcgan
 from models.cramer_dcgan import cramer_dcgan
 from models.ot_gan import ot_gan
 from models.utils import save_checkpoint, load_checkpoint
 from tensorflow.python import debug as tf_debug
-from models.distributed_sinkhorm import distributed_sinkhorn
+from models.distributed_sinkhorn import distributed_sinkhorn
+from utils import get_data
+from validation import *
+
+#generate samples
+def generate_samples(sess, gan, n_batches=20):
+    z_sample = np.random.normal(size=(gan.batch_size, gan.z_dim))
+    samples = sess.run(gan.xg, feed_dict={gan.z: z_sample})
+
+    for i in range(0, n_batches-1):
+        z_sample = np.random.normal(size=(gan.batch_size, gan.z_dim))
+        samples = np.concatenate((samples, sess.run(gan.xg, feed_dict={gan.z: z_sample})))
+        
+    return np.squeeze(samples)
 
 
 #OT GAN
@@ -49,19 +58,27 @@ def train_otgan(comm_topo, data, config):
                                    intra_op_parallelism_threads=config.num_intra_threads,
                                    log_device_placement=False,
                                    allow_soft_placement=True)
+        
+        # load test data
+        test_images = get_data(config.test_datafile, config.data_format);
+
+        # prepare plots dir
+        plots_dir = os.path.join(config.plots_dir, config.experiment)
+        if not os.path.exists(config.plots_dir):
+            try:
+                os.makedirs(config.plots_dir)
+            except:
+                print("Rank {}: path {} does already exist.".format(hvd.rank(),config.plots_dir))
 
         #horovod additions
         hooks = []
-        comm_size = 1
-        comm_rank = 0
-        if use_horovod:
-            sess_config.gpu_options.visible_device_list = str(hvd.local_rank())
-            hooks.append(hvd.BroadcastGlobalVariablesHook(0))
-            comm_size = hvd.size()
-            comm_rank = hvd.rank()
+        sess_config.gpu_options.visible_device_list = str(hvd.local_rank())
+        hooks.append(hvd.BroadcastGlobalVariablesHook(0))
+        comm_size = hvd.size()
+        comm_rank = hvd.rank()
         
         #stop hook
-        num_batches = data.shape[0] // gan.global_batch_size
+        num_batches = data.shape[0] // (2*gan.global_batch_size)
         num_steps = config.epoch*num_batches
         hooks.append(tf.train.StopAtStepHook(last_step=num_steps))
         
@@ -114,18 +131,18 @@ def train_otgan(comm_topo, data, config):
                 idx = 0
                 while idx < num_batches:
                     
-                    #get node-local fraction of new batch
+                    #get node-local fraction of new batches
                     rstart = local_row_start+(idx*gan.global_batch_size)
                     rend = local_row_end+(idx*gan.global_batch_size)
-                    cstart = local_col_start+(idx*gan.global_batch_size)
-                    cend = local_col_end+(idx*gan.global_batch_size)
+                    cstart = local_col_start+((idx+1)*gan.global_batch_size)
+                    cend = local_col_end+((idx+1)*gan.global_batch_size)
                     
                     #now grab the node-local fraction of the new batch
                     xr = data[perm[rstart:rend]]
                     xrp = data[perm[cstart:cend]]
                     #do the same with random vectors:
-                    z = gan.generate_prior()[rstart:rend,:]
-                    zp = gan.generate_prior()[cstart:cend,:]
+                    z = gan.generate_prior()[local_row_start:local_row_end,:]
+                    zp = gan.generate_prior()[local_col_start:local_col_end,:]
                     
                     #generate the distance matrices:
                     c_hxr_hxg, c_hxr_hxgp, c_hxrp_hxg, c_hxrp_hxgp, c_hxr_hxrp, c_hxg_hxgp = sess.run([gan.c_hxr_hxg, 
@@ -142,44 +159,49 @@ def train_otgan(comm_topo, data, config):
                                                                                                         })
                     
                     #compute distance matrices using sinkhorn:
-                    lambd = 1., tolerance=1.e-6, min_iters=100, max_iters=5000
-                    map_hxr_hxg = distributed_sinkhorn(gan.comm_topo, c_hxr_hxg, lambd, tolerance, min_iters, max_iters)
-                    map_hxr_hxgp = distributed_sinkhorn(gan.comm_topo, c_hxr_hxgp, lambd, tolerance, min_iters, max_iters)
-                    map_hxrp_hxg = distributed_sinkhorn(gan.comm_topo, c_hxrp_hxg, lambd, tolerance, min_iters, max_iters)
-                    map_hxrp_hxgp = distributed_sinkhorn(gan.comm_topo, c_hxrp_hxgp, lambd, tolerance, min_iters, max_iters)
-                    map_hxr_hxrp = distributed_sinkhorn(gan.comm_topo, c_hxr_hxrp, lambd, tolerance, min_iters, max_iters)
-                    map_hxg_hxgp = distributed_sinkhorn(gan.comm_topo, c_hxg_hxgp, lambd, tolerance, min_iters, max_iters)
+                    lambd = 10.; tolerance=1.e-6; min_iters=10; max_iters=2000
+                    map_hxr_hxg = distributed_sinkhorn(gan.comm_topo, c_hxr_hxg, lambd, tolerance, min_iters, max_iters, verbose=True)
+                    map_hxr_hxgp = distributed_sinkhorn(gan.comm_topo, c_hxr_hxgp, lambd, tolerance, min_iters, max_iters, verbose=True)
+                    map_hxrp_hxg = distributed_sinkhorn(gan.comm_topo, c_hxrp_hxg, lambd, tolerance, min_iters, max_iters, verbose=True)
+                    map_hxrp_hxgp = distributed_sinkhorn(gan.comm_topo, c_hxrp_hxgp, lambd, tolerance, min_iters, max_iters, verbose=True)
+                    map_hxr_hxrp = distributed_sinkhorn(gan.comm_topo, c_hxr_hxrp, lambd, tolerance, min_iters, max_iters, verbose=True)
+                    map_hxg_hxgp = distributed_sinkhorn(gan.comm_topo, c_hxg_hxgp, lambd, tolerance, min_iters, max_iters, verbose=True)
+                    
+                    feed_dict = {gan.xr: xr, gan.xrp: xrp, gan.z: z, gan.zp: zp,
+                                gan.map_hxr_hxg: map_hxr_hxg,
+                                gan.map_hxr_hxgp: map_hxr_hxgp,
+                                gan.map_hxrp_hxg: map_hxrp_hxg,
+                                gan.map_hxrp_hxgp: map_hxrp_hxgp,
+                                gan.map_hxr_hxrp: map_hxr_hxrp,
+                                gan.map_hxg_hxgp: map_hxg_hxgp}
                     
                     if gstep%config.n_up==0:
                         #do combined update
-                        _, g_sum, d_sum = sess.run([update_op, gan.g_summary, gan.d_summary], feed_dict={gan.xr: xr, gan.xrp: xrp, gan.z: z, gan.zp: zp,
-                                                                                                         gan.map_hxr_hxg: map_hxr_hxg,
-                                                                                                         gan.map_hxr_hxgp: map_hxr_hxgp,
-                                                                                                         gan.map_hxrp_hxgp: map_hxrp_hxgp,
-                                                                                                         gan.map_hxr_hxrp: map_hxr_hxrp,
-                                                                                                         gan.map_hxg_hxgp: map_hxg_hxgp})
+                        _, g_sum, d_sum = sess.run([update_op, gan.g_summary, gan.d_summary], feed_dict=feed_dict)
                     else:
                         #update generator
-                        _, g_sum = sess.run([g_update_op, gan.d_summary], feed_dict={gan.xr: xr, gan.xrp: xrp, gan.z: z, gan.zp: zp,
-                                                                                    gan.map_hxr_hxg: map_hxr_hxg,
-                                                                                    gan.map_hxr_hxgp: map_hxr_hxgp,
-                                                                                    gan.map_hxrp_hxgp: map_hxrp_hxgp,
-                                                                                    gan.map_hxr_hxrp: map_hxr_hxrp,
-                                                                                    gan.map_hxg_hxgp: map_hxg_hxgp})
+                        _, g_sum = sess.run([g_update_op, gan.d_summary], feed_dict=feed_dict)
                     
                     #increase and get step count
                     gstep = sess.run(gan.global_step)
                     
                     #print some stats
                     if config.verbose:
-                        loss = sess.run(gan.ot_loss, feed_dict={gan.images_1: batch_images_1, gan.images_2: batch_images_2})
+                        loss = sess.run(gan.ot_loss, feed_dict=feed_dict)
                         print("Rank %2d, Epoch: [%2d] Step: [%4d/%4d] time: %4.4f, loss: %.8f" \
                                 % (comm_rank, epoch, gstep, num_steps, time.time() - start_time, loss))
                     elif gstep%num_batches == 0:
                         print("Rank %2d, Epoch: [%2d] Step: [%4d/%4d] time: %4.4f"%(comm_rank, epoch, gstep, num_steps, time.time() - start_time))
                     
+                    # increment epoch counter
+                    if gstep%config.print_frequency == 0:
+                        g_images = generate_samples(sess, gan)
+                        if hvd.rank() == 0:
+                            plot_pixel_histograms(g_images, test_images, dump_path=plots_dir, tag="step%d_epoch%d" % (gstep, epoch))
+                            #dump_samples(g_images, dump_path="%s/step%d_epoch%d" % (plots_dir, gstep, gstep/num_steps_per_rank_per_epoch), tag="synthetic")
+                    
                     #update batch counter
-                    idx+=1
+                    idx+=2
                     
                 # save a checkpoint every epoch
                 epoch = sess.run(gan.increment_epoch)
