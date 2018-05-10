@@ -159,13 +159,18 @@ def train_otgan(comm_topo, data, config):
                                                                                                         })
                     
                     #compute distance matrices using sinkhorn:
-                    lambd = 10.; tolerance=1.e-6; min_iters=10; max_iters=2000
-                    map_hxr_hxg = distributed_sinkhorn(gan.comm_topo, c_hxr_hxg, lambd, tolerance, min_iters, max_iters, verbose=True)
-                    map_hxr_hxgp = distributed_sinkhorn(gan.comm_topo, c_hxr_hxgp, lambd, tolerance, min_iters, max_iters, verbose=True)
-                    map_hxrp_hxg = distributed_sinkhorn(gan.comm_topo, c_hxrp_hxg, lambd, tolerance, min_iters, max_iters, verbose=True)
-                    map_hxrp_hxgp = distributed_sinkhorn(gan.comm_topo, c_hxrp_hxgp, lambd, tolerance, min_iters, max_iters, verbose=True)
-                    map_hxr_hxrp = distributed_sinkhorn(gan.comm_topo, c_hxr_hxrp, lambd, tolerance, min_iters, max_iters, verbose=True)
-                    map_hxg_hxgp = distributed_sinkhorn(gan.comm_topo, c_hxg_hxgp, lambd, tolerance, min_iters, max_iters, verbose=True)
+                    lambd = 10.; tolerance=1.e-6; min_iters=10; max_iters=500
+                    
+                    if gan.comm_topo.comm_rank == 0:
+                        print("Starting Sinkhorn")
+                    map_hxr_hxg = distributed_sinkhorn(gan.comm_topo, c_hxr_hxg, lambd, tolerance, min_iters, max_iters, verbose=False)
+                    map_hxr_hxgp = distributed_sinkhorn(gan.comm_topo, c_hxr_hxgp, lambd, tolerance, min_iters, max_iters, verbose=False)
+                    map_hxrp_hxg = distributed_sinkhorn(gan.comm_topo, c_hxrp_hxg, lambd, tolerance, min_iters, max_iters, verbose=False)
+                    map_hxrp_hxgp = distributed_sinkhorn(gan.comm_topo, c_hxrp_hxgp, lambd, tolerance, min_iters, max_iters, verbose=False)
+                    map_hxr_hxrp = distributed_sinkhorn(gan.comm_topo, c_hxr_hxrp, lambd, tolerance, min_iters, max_iters, verbose=False)
+                    map_hxg_hxgp = distributed_sinkhorn(gan.comm_topo, c_hxg_hxgp, lambd, tolerance, min_iters, max_iters, verbose=False)
+                    if gan.comm_topo.comm_rank == 0:
+                        print("Ending Sinkhorn")
                     
                     feed_dict = {gan.xr: xr, gan.xrp: xrp, gan.z: z, gan.zp: zp,
                                 gan.map_hxr_hxg: map_hxr_hxg,

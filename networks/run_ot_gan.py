@@ -1,5 +1,6 @@
 import os
-import subprocess
+import subprocess as sp
+import shlex
 
 #datafile = '/data0/mustafa/cosmo/data/cosmo_primary_256_200k_train.npy'
 train_datafile = '/global/cscratch1/sd/tkurth/gb2018/cosmoGAN/small_set/cosmo_primary_256_200k_train.npy'
@@ -27,6 +28,9 @@ verbose = 'True'
 nodeid = int(os.environ['SLURM_PROCID'])
 numnodes = int(os.environ['SLURM_NNODES'])
 
+#copy environment
+my_env = dict(os.environ.copy())
+
 experiment = 'cramer_otgan_cosmo_primary_256_200k_batchSize%i_learningRate_%0.6f_nUp%i_flipLabel%0.3f_'\
              'nd%i_ng%i_gfdim%i_dfdim%i_zdim%i_nodes%i_rank%i'%(batch_size, learning_rate, n_up, flip_labels, nd_layers,\
                                                                  ng_layers, gf_dim, df_dim, z_dim, numnodes, nodeid)
@@ -46,5 +50,6 @@ if not os.path.isdir('output'):
 
 # print command.split()
 #f_out = open('output/'+experiment+'.log', 'w')
-subprocess.call(command.split())
+proc = sp.Popen(shlex.split(command), stdout=sp.PIPE, stderr=sp.PIPE, env=my_env)
+proc.communicate()
 #subprocess.call(command.split(), stdout=f_out)

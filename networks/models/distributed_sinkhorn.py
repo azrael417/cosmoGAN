@@ -139,25 +139,32 @@ def distributed_sinkhorn(comm_topo, loc_amat, lambd, tolerance, min_iters, max_i
     
     #do the loop
     while( ((normdiff>tolerance) or (iters<min_iters)) and (iters<max_iters) ):
+    #while( iters<max_iters ):
         
         #backup old vectors
         loc_uvecp[...] = loc_uvec[...]
         loc_vvecp[...] = loc_vvec[...]
         
         #update
-        loc_vvec = 1./loc_loc_dist_multiply(comm_topo, loc_kmat, loc_uvec, transpose=True)        
+        #print("%i Rank (%i %i): updating v"%(iters+1, comm_topo.comm_row_rank, comm_topo.comm_col_rank))
+        loc_vvec = 1./loc_loc_dist_multiply(comm_topo, loc_kmat, loc_uvec, transpose=True)
+        #print("%i Rank (%i %i): updating u"%(iters+1, comm_topo.comm_row_rank,comm_topo.comm_col_rank))
         loc_uvec = 1./loc_loc_dist_multiply(comm_topo, loc_kmat, loc_vvec, transpose=False)
     
-        #compute norm difference locally
-        loc_u_normdiff = np.sum(np.square(loc_uvec-loc_uvecp))
-        loc_v_normdiff = np.sum(np.square(loc_vvec-loc_vvecp))
+        #compute norm difference locally and average over the cols and rows respectively
+        loc_u_normdiff = np.sum(np.square(loc_uvec-loc_uvecp)) #/ np.float(comm_topo.comm_row_size)
+        loc_v_normdiff = np.sum(np.square(loc_vvec-loc_vvecp)) #/ np.float(comm_topo.comm_col_size)
+        #normdiff = loc_u_normdiff + loc_v_normdiff
         
         #allreduce
         loc_v_normdiff = comm_topo.comm_row.allreduce(loc_v_normdiff, op=MPI.SUM)
         loc_u_normdiff = comm_topo.comm_col.allreduce(loc_u_normdiff, op=MPI.SUM)
+        #print("%i Rank (%i %i): updating norm"%(iters+1, comm_topo.comm_row_rank,comm_topo.comm_col_rank))
+        #normdiff = comm_topo.comm.allreduce(normdiff, op=MPI.SUM)
         
         #compute global norm
         normdiff = np.sqrt(loc_u_normdiff) + np.sqrt(loc_v_normdiff)
+        #normdiff = np.sqrt(normdiff)
         iters += 1
         
         if comm_topo.comm_rank==0 and verbose:
@@ -207,59 +214,59 @@ def distributed_sinkhorn(comm_topo, loc_amat, lambd, tolerance, min_iters, max_i
     return loc_kmat
 
 
-##main function
-#def main(config):
-#    
-#    #see if division is even
-#    if (config.rank % config.row_comms !=0) or (config.rank % config.col_comms !=0):
-#        raise ValueError("Error, make sure that the matrix rank is integer-divisible by the process grid")
-#    
-#    #size of comm grid
-#    comm_row_size = config.row_comms
-#    comm_col_size = config.col_comms
-#    local_row_size = config.rank // config.row_comms
-#    local_col_size = config.rank // config.col_comms
-#    num_features = 10
-#    
-#    #get rank and comm size info
-#    comm = MPI.COMM_WORLD
-#    comm_size = comm.Get_size()
-#    comm_rank = comm.Get_rank()
-#    comm_topo = comm_utils(comm, comm_size, comm_rank, comm_row_size, comm_col_size)
-#    comm_topo.local_row_size = local_row_size
-#    comm_topo.local_col_size = local_col_size
-#    
-#    #local ranges
-#    local_row_start = comm_topo.comm_row_rank*comm_topo.local_row_size
-#    local_row_end = (comm_topo.comm_row_rank+1)*comm_topo.local_row_size
-#    local_col_start = comm_topo.comm_col_rank*comm_topo.local_col_size
-#    local_col_end = (comm_topo.comm_col_rank+1)*comm_topo.local_col_size
-#    
-#    #create two big random vectors
-#    np.random.seed(1234)
-#    batch_x = np.random.rand(config.rank, num_features).astype(dtype)
-#    batch_y = np.random.rand(config.rank, num_features).astype(dtype)
-#    
-#    #extract local patches for creating the local matrix
-#    loc_batch_x = batch_x[local_row_start:local_row_end,:]
-#    loc_batch_y = batch_x[local_col_start:local_col_end,:]
-#    loc_cmatrix = compute_distance(loc_batch_x, loc_batch_y)
-#    
-#    #create global matrix for checking
-#    cmatrix = np.zeros((config.rank, config.rank), dtype=dtype)
-#    cmatrix_tmp = np.zeros((config.rank, config.rank), dtype=dtype)
-#    cmatrix_tmp[local_row_start:local_row_end, local_col_start:local_col_end]=loc_cmatrix[...]
-#    comm_topo.comm.Allreduce(cmatrix_tmp, cmatrix, op=MPI.SUM)
-#    
-#    #run sinkhorn
-#    mapping = distributed_sinkhorn(comm_topo, loc_cmatrix, 1., 0.0001, 20, 100)
-#    
-#    
-#if __name__ == "__main__":
-#    AP = argparse.ArgumentParser()
-#    AP.add_argument("--row_comms",default=2,type=int,help="Number of row communicators")
-#    AP.add_argument("--col_comms",default=1,type=int,help="Number of column communicators")
-#    AP.add_argument("--rank",default=8,type=int,help="Rank of matrix (square by definition)")
-#    config = AP.parse_args()
-#    
-#    main(config)
+#main function
+def main(config):
+    
+    #see if division is even
+    if (config.rank % config.row_comms !=0) or (config.rank % config.col_comms !=0):
+        raise ValueError("Error, make sure that the matrix rank is integer-divisible by the process grid")
+    
+    #size of comm grid
+    comm_row_size = config.row_comms
+    comm_col_size = config.col_comms
+    local_row_size = config.rank // config.row_comms
+    local_col_size = config.rank // config.col_comms
+    num_features = 64
+    
+    #get rank and comm size info
+    comm = MPI.COMM_WORLD.Dup()
+    comm_size = comm.Get_size()
+    comm_rank = comm.Get_rank()
+    comm_topo = comm_utils(comm, comm_size, comm_rank, comm_row_size, comm_col_size)
+    comm_topo.local_row_size = local_row_size
+    comm_topo.local_col_size = local_col_size
+    
+    #local ranges
+    local_row_start = comm_topo.comm_row_rank*comm_topo.local_row_size
+    local_row_end = (comm_topo.comm_row_rank+1)*comm_topo.local_row_size
+    local_col_start = comm_topo.comm_col_rank*comm_topo.local_col_size
+    local_col_end = (comm_topo.comm_col_rank+1)*comm_topo.local_col_size
+    
+    #create two big random vectors
+    np.random.seed(1234)
+    batch_x = np.random.rand(config.rank, num_features).astype(dtype)
+    batch_y = np.random.rand(config.rank, num_features).astype(dtype)
+    
+    #extract local patches for creating the local matrix
+    loc_batch_x = batch_x[local_row_start:local_row_end,:]
+    loc_batch_y = batch_x[local_col_start:local_col_end,:]
+    loc_cmatrix = compute_distance(loc_batch_x, loc_batch_y)
+    
+    #create global matrix for checking
+    cmatrix = np.zeros((config.rank, config.rank), dtype=dtype)
+    cmatrix_tmp = np.zeros((config.rank, config.rank), dtype=dtype)
+    cmatrix_tmp[local_row_start:local_row_end, local_col_start:local_col_end]=loc_cmatrix[...]
+    comm_topo.comm.Allreduce(cmatrix_tmp, cmatrix, op=MPI.SUM)
+    
+    #run sinkhorn
+    mapping = distributed_sinkhorn(comm_topo, loc_cmatrix, 10., 0.0001, 20, 100, verbose=True)
+    
+    
+if __name__ == "__main__":
+    AP = argparse.ArgumentParser()
+    AP.add_argument("--row_comms",default=2,type=int,help="Number of row communicators")
+    AP.add_argument("--col_comms",default=1,type=int,help="Number of column communicators")
+    AP.add_argument("--rank",default=8,type=int,help="Rank of matrix (square by definition)")
+    config = AP.parse_args()
+    
+    main(config)

@@ -50,6 +50,8 @@ def main(_):
     config.comm_size = hvd.size()
     config.comm_rank = hvd.rank()
     config.comm_local_rank = hvd.local_rank()
+    #if config.comm_rank == 0:
+    #    print("Threads supported: %s"%str(hvd.mpi_threads_supported()))
     #create topological comm
     # Make sure MPI is not re-initialized.
     import mpi4py.rc
@@ -71,14 +73,19 @@ def main(_):
     local_col_size = config.batch_size
     
     #get rank and comm size info
-    comm = MPI.COMM_WORLD
+    comm = MPI.COMM_WORLD.Dup()
     comm_size = comm.Get_size()
     comm_rank = comm.Get_rank()
     comm_topo = comm_utils(comm, comm_size, comm_rank, comm_row_size, comm_col_size)
     comm_topo.local_row_size = local_row_size
     comm_topo.local_col_size = local_col_size
     
-    pprint.PrettyPrinter().pprint(config.__flags)
+    # print values of all the flags
+    if comm_rank==0:
+        print 'Command-line flag settings:'
+        d = config.flag_values_dict()
+        for k in sorted(d):
+            print '  {} = {}'.format(k, d[k])
 
     if config.model == 'otgan':
         train.train_otgan(comm_topo, get_data(config.train_datafile, config.data_format), config)
