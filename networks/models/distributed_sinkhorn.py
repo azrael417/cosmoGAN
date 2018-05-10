@@ -47,6 +47,11 @@ def compute_distance(batch_x, batch_y):
     return np.clip(result, a_min=0., a_max=1.)
 
 
+#wrapper for loss reduction to keep mpi4py stuff in this file
+def reduce_loss(comm_topo, loss):
+    return comm_topo.comm.allreduce(loss, op=MPI.SUM) / np.float(comm_topo.comm_size)
+
+
 #multiplies local matrix with local diagonal matrix where only the diagonal is stored
 def loc_loc_dist_diag_multiply(comm_topo, loc_mat, loc_vec, from_left=False):
     

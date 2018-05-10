@@ -82,13 +82,19 @@ def main(_):
     
     # print values of all the flags
     if comm_rank==0:
-        print 'Command-line flag settings:'
+        print ('Command-line flag settings:')
         d = config.flag_values_dict()
         for k in sorted(d):
             print '  {} = {}'.format(k, d[k])
-
+    
+    if comm_rank==0:
+        print 'Loading data.'
+    trn_tuple = get_data(config.train_datafile, config.data_format, compute_stats=True)
+    if comm_rank==0:
+        print ('Data loaded. Min = %f max = %f.'%(trn_tuple[1], trn_tuple[2]))
+    
     if config.model == 'otgan':
-        train.train_otgan(comm_topo, get_data(config.train_datafile, config.data_format), config)
+        train.train_otgan(comm_topo, trn_tuple, config)
     else:
         raise ValueError("Error, only OT-GAN training supported.")
 

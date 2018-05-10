@@ -40,4 +40,4 @@ if [ ! -d 'output' ]; then
 fi
 
 #run command
-${command}
+${command} |& tee -a output/${experiment}.${SLURM_JOBID}.out

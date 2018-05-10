@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH -q regular
-#SBATCH -N 16
+#SBATCH -N 100
 #SBATCH -A dasrepo
 #SBATCH -C knl
 #SBATCH -t 4:00:00
@@ -26,5 +26,5 @@ export PYTHONPATH=$(pwd)/../networks  #:${modulebase}/lib/python2.7/site-package
 rm -r checkpoints/*
 
 #run training
-srun -N ${SLURM_NNODES} -n ${SLURM_NNODES} -c 272 -u ./run_ot_gan.sh 4 4
+srun -N ${SLURM_NNODES} -n ${SLURM_NNODES} -c 272 -u ./run_ot_gan.sh 100 100
 #srun -N 1 -n 1 -c 272 -u python ../networks/run_cramer_dcgan.py

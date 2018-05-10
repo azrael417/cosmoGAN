@@ -9,7 +9,7 @@ from models.cramer_dcgan import cramer_dcgan
 from models.ot_gan import ot_gan
 from models.utils import save_checkpoint, load_checkpoint
 from tensorflow.python import debug as tf_debug
-from models.distributed_sinkhorn import distributed_sinkhorn
+from models.distributed_sinkhorn import distributed_sinkhorn, reduce_loss
 from utils import get_data
 from validation import *
 
@@ -26,13 +26,19 @@ def generate_samples(sess, gan, n_batches=20):
 
 
 #OT GAN
-def train_otgan(comm_topo, data, config):
-
+def train_otgan(comm_topo, data_tuple, config):
+    
+    #disassemble the tuple
+    trn_data = data_tuple[0]
+    trn_min = data_tuple[1]
+    trn_max = data_tuple[2]
+    
     training_graph = tf.Graph()
 
     with training_graph.as_default():
         
-        print("Creating GAN")
+        if comm_topo.comm_rank == 0:
+            print("Creating GAN")
         gan = ot_gan(comm_topo=comm_topo,
                            output_size=config.output_size,
                            batch_size=config.batch_size,
@@ -60,7 +66,7 @@ def train_otgan(comm_topo, data, config):
                                    allow_soft_placement=True)
         
         # load test data
-        test_images = get_data(config.test_datafile, config.data_format);
+        test_images, _, _ = get_data(config.test_datafile, config.data_format);
 
         # prepare plots dir
         plots_dir = os.path.join(config.plots_dir, config.experiment)
@@ -78,7 +84,7 @@ def train_otgan(comm_topo, data, config):
         comm_rank = hvd.rank()
         
         #stop hook
-        num_batches = data.shape[0] // (2*gan.global_batch_size)
+        num_batches = trn_data.shape[0] // (2*gan.global_batch_size)
         num_steps = config.epoch*num_batches
         hooks.append(tf.train.StopAtStepHook(last_step=num_steps))
         
@@ -104,7 +110,8 @@ def train_otgan(comm_topo, data, config):
         local_col_start = gan.comm_topo.comm_col_rank*gan.comm_topo.local_col_size
         local_col_end = (gan.comm_topo.comm_col_rank+1)*gan.comm_topo.local_col_size
         
-        print("Starting Session")
+        if gan.comm_topo.comm_rank == 0:
+            print("Starting Session")
         with tf.train.MonitoredTrainingSession(config=sess_config, hooks=hooks) as sess:
         #with tf.Session(config=sess_config) as sess:
             
@@ -112,7 +119,7 @@ def train_otgan(comm_topo, data, config):
             #sess = tf_debug.LocalCLIDebugWrapperSession(sess)
             
             #init global variables
-            sess.run([init_op, init_local_op]) #, feed_dict={gan.images_1: data[0:config.batch_size,:,:,:], gan.images_2: data[0:config.batch_size,:,:,:]})
+            sess.run([init_op, init_local_op])
 
             #load_checkpoint(sess, gan.saver, 'dcgan', checkpoint_dir, step=config.save_every_step)
 
@@ -124,7 +131,7 @@ def train_otgan(comm_topo, data, config):
             #while True:
                 
                 #permute data
-                perm = np.random.permutation(data.shape[0])
+                perm = np.random.permutation(trn_data.shape[0])
                 
                 #do the epoch
                 gstep = 0
@@ -138,8 +145,8 @@ def train_otgan(comm_topo, data, config):
                     cend = local_col_end+((idx+1)*gan.global_batch_size)
                     
                     #now grab the node-local fraction of the new batch
-                    xr = data[perm[rstart:rend]]
-                    xrp = data[perm[cstart:cend]]
+                    xr = (trn_data[perm[rstart:rend]] - trn_min) / (trn_max - trn_min)
+                    xrp = (trn_data[perm[cstart:cend]] - trn_min) / (trn_max - trn_min)
                     #do the same with random vectors:
                     z = gan.generate_prior()[local_row_start:local_row_end,:]
                     zp = gan.generate_prior()[local_col_start:local_col_end,:]
@@ -192,11 +199,13 @@ def train_otgan(comm_topo, data, config):
                     
                     #print some stats
                     if config.verbose:
-                        loss = sess.run(gan.ot_loss, feed_dict=feed_dict)
-                        print("Rank %2d, Epoch: [%2d] Step: [%4d/%4d] time: %4.4f, loss: %.8f" \
-                                % (comm_rank, epoch, gstep, num_steps, time.time() - start_time, loss))
+                        loss = reduce_loss(gan.comm_topo, sess.run(gan.ot_loss, feed_dict=feed_dict))
+                        if gan.comm_topo.comm_rank == 0:
+                            print("Rank %2d, Epoch: [%2d] Step: [%4d/%4d] time: %4.4f, loss: %.8f" \
+                                    % (comm_rank, epoch, gstep, num_steps, time.time() - start_time, loss))
                     elif gstep%num_batches == 0:
-                        print("Rank %2d, Epoch: [%2d] Step: [%4d/%4d] time: %4.4f"%(comm_rank, epoch, gstep, num_steps, time.time() - start_time))
+                        if gan.comm_topo.comm_rank == 0:
+                            print("Rank %2d, Epoch: [%2d] Step: [%4d/%4d] time: %4.4f"%(comm_rank, epoch, gstep, num_steps, time.time() - start_time))
                     
                     # increment epoch counter
                     if gstep%config.print_frequency == 0:

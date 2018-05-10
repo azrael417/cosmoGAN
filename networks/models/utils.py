@@ -2,7 +2,7 @@ import os
 import tensorflow as tf
 import numpy as np
 
-def get_data(filename, fformat):
+def get_data(filename, fformat, compute_stats = False):
     data = np.load(filename, mmap_mode='r')
 
     #number of samples
@@ -19,7 +19,13 @@ def get_data(filename, fformat):
     else: # 'NCHW'
         data = np.expand_dims(data, axis=1)
 
-    return data
+    minval = 0.
+    maxval = 1.
+    if compute_stats:
+        minval = data.min()
+        maxval = data.max()
+
+    return data, minval, maxval
 
 def save_checkpoint(sess, saver, tag, checkpoint_dir, counter, step=False):
 
