@@ -1,11 +1,11 @@
 import numpy as np
 from scipy import stats
-import matplotlib.pyplot as plt
 import tensorflow as tf
 import horovod.tensorflow as hvd
 
 import matplotlib
 matplotlib.use('Agg')
+import matplotlib.pyplot as plt
 
 import os
 

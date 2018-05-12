@@ -56,7 +56,8 @@ def train_otgan(comm_topo, data_tuple, config):
         gan.training_graph()
         d_update_op, g_update_op = gan.optimizer(config.learning_rate, config.beta1, clip_param=0.01)
         update_op = tf.group(d_update_op, g_update_op, name="all_optims")
-
+        
+        #checkpoint directory
         checkpoint_dir = os.path.join(config.checkpoint_dir, config.experiment)
 
         #session config
@@ -77,11 +78,14 @@ def train_otgan(comm_topo, data_tuple, config):
                 print("Rank {}: path {} does already exist.".format(hvd.rank(),config.plots_dir))
 
         #horovod additions
-        hooks = []
         sess_config.gpu_options.visible_device_list = str(hvd.local_rank())
-        hooks.append(hvd.BroadcastGlobalVariablesHook(0))
         comm_size = hvd.size()
         comm_rank = hvd.rank()
+        
+        #hooks
+        hooks = []
+        #do not use the bcast hook but instead bcast manually
+        #hooks.append(hvd.BroadcastGlobalVariablesHook(0))
         
         #stop hook
         num_batches = trn_data.shape[0] // (2*gan.global_batch_size)
@@ -103,6 +107,7 @@ def train_otgan(comm_topo, data_tuple, config):
         #variables initializer
         init_op = tf.global_variables_initializer()
         init_local_op = tf.local_variables_initializer()
+        init_restore = hvd.broadcast_global_variables(0)
         
         #some math to what fraction this node gets
         local_row_start = gan.comm_topo.comm_row_rank*gan.comm_topo.local_row_size
@@ -113,7 +118,6 @@ def train_otgan(comm_topo, data_tuple, config):
         if gan.comm_topo.comm_rank == 0:
             print("Starting Session")
         with tf.train.MonitoredTrainingSession(config=sess_config, hooks=hooks) as sess:
-        #with tf.Session(config=sess_config) as sess:
             
             #wrap to CLI
             #sess = tf_debug.LocalCLIDebugWrapperSession(sess)
@@ -121,8 +125,13 @@ def train_otgan(comm_topo, data_tuple, config):
             #init global variables
             sess.run([init_op, init_local_op])
 
-            #load_checkpoint(sess, gan.saver, 'dcgan', checkpoint_dir, step=config.save_every_step)
-
+            #restore from cp
+            if hvd.rank() == 0:
+                load_checkpoint(sess, gan.saver, checkpoint_dir, step=config.save_every_step)
+            #broadcast
+            sess.run(init_restore)
+            
+            #init counters
             epoch = sess.run(gan.increment_epoch)
             start_time = time.time()
             
