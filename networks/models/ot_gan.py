@@ -92,10 +92,14 @@ class ot_gan(object):
         #defining loss
         with tf.name_scope("loss"):
             self.ot_loss = w_xr_xg + w_xr_xgp + w_xrp_xg + w_xrp_xgp - 2.* ( w_xr_xrp + w_xg_xgp )
+            #critic gets different sign
+            self.d_loss = -self.ot_loss
+            #generator gets normal sign
+            self.g_loss = self.ot_loss
 
-        self.d_summary = tf.summary.merge([tf.summary.histogram("loss/L_critic", self.ot_loss)])
+        self.d_summary = tf.summary.merge([tf.summary.histogram("loss/L_critic", self.d_loss)])
 
-        g_sum = [tf.summary.histogram("loss/L_generator", self.ot_loss)]
+        g_sum = [tf.summary.histogram("loss/L_generator", self.g_loss)]
 
         if self.data_format == "NHWC": # tf.summary.image is not implemented for NCHW
             g_sum.append(tf.summary.image("G", self.xg, max_outputs=4))
@@ -142,12 +146,12 @@ class ot_gan(object):
         #critic
         d_optim = tf.train.AdamOptimizer(learning_rate, beta1=beta1)
         d_optim = hvd.DistributedOptimizer(d_optim)
-        d_op = d_optim.minimize(self.ot_loss, var_list=self.d_vars)
+        d_op = d_optim.minimize(self.d_loss, var_list=self.d_vars)
 
         #generator
         g_optim = tf.train.AdamOptimizer(learning_rate, beta1=beta1)
         g_optim = hvd.DistributedOptimizer(g_optim)
-        g_op = g_optim.minimize(self.ot_loss, global_step=self.global_step, var_list=self.g_vars)
+        g_op = g_optim.minimize(self.g_loss, global_step=self.global_step, var_list=self.g_vars)
 
         return d_op, g_op
 

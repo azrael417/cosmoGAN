@@ -144,7 +144,6 @@ def train_otgan(comm_topo, data_tuple, config):
                 
                 #permute data
                 perm = trn_shuffle_rng.permutation(trn_data.shape[0])
-                trn_data = trn_data[perm]
                 
                 #do the epoch
                 gstep = 0
@@ -158,8 +157,8 @@ def train_otgan(comm_topo, data_tuple, config):
                     cend = local_col_end+((idx+1)*gan.global_batch_size)
                     
                     #now grab the node-local fraction of the new batch
-                    xr = (trn_data[rstart:rend,:] - trn_min) / (trn_max - trn_min)
-                    xrp = (trn_data[cstart:cend,:] - trn_min) / (trn_max - trn_min)
+                    xr = (trn_data[perm[rstart:rend],:] - trn_min) / (trn_max - trn_min)
+                    xrp = (trn_data[perm[cstart:cend],:] - trn_min) / (trn_max - trn_min)
                     #do the same with random vectors:
                     z = gan.generate_prior()[local_row_start:local_row_end,:]
                     zp = gan.generate_prior()[local_col_start:local_col_end,:]

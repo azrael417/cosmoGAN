@@ -1,4 +1,5 @@
 import tensorflow as tf
+import tensorflow.contrib.keras as tfk
 
 
 def debug(t, tensorlist, name=None):
@@ -26,6 +27,7 @@ def linear(input_, output_size, scope=None, stddev=0.02, bias_start=0.0, transpo
 
         return tf.matmul(input_, matrix, transpose_b=transpose_b) + bias
 
+
 def conv2d(input_, out_channels, data_format, kernel=5, stride=2, stddev=0.02, name="conv2d"):
 
     if data_format == "NHWC":
@@ -37,7 +39,8 @@ def conv2d(input_, out_channels, data_format, kernel=5, stride=2, stddev=0.02, n
 
     with tf.variable_scope(name):
         w = tf.get_variable('w', [kernel, kernel, in_channels, out_channels], trainable=True,
-                            initializer=tf.truncated_normal_initializer(stddev=stddev))
+                             initializer=tfk.initializers.glorot_uniform())
+                            #initializer=tf.truncated_normal_initializer(stddev=stddev))
         conv = tf.nn.conv2d(input_, w, strides=strides, padding='SAME', data_format=data_format)
 
         biases = tf.get_variable('biases', [out_channels], trainable=True, initializer=tf.constant_initializer(0.0))
@@ -48,6 +51,7 @@ def conv2d(input_, out_channels, data_format, kernel=5, stride=2, stddev=0.02, n
         #debug
 
         return conv
+
 
 def conv2d_transpose(input_, output_shape, data_format, kernel=5, stride=2, stddev=0.02,
                      name="conv2d_transpose"):
@@ -63,7 +67,8 @@ def conv2d_transpose(input_, output_shape, data_format, kernel=5, stride=2, stdd
 
     with tf.variable_scope(name):
         w = tf.get_variable('w', [kernel, kernel, out_channels, in_channels], trainable=True,
-                            initializer=tf.random_normal_initializer(stddev=stddev))
+                            initializer=tfk.initializers.glorot_uniform())
+                            #initializer=tf.random_normal_initializer(stddev=stddev))
         
         deconv = tf.nn.conv2d_transpose(input_, w, output_shape=output_shape, strides=strides, data_format=data_format)
 
