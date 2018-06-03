@@ -1,9 +1,10 @@
 #!/bin/bash
 
 #input data
-train_datafile='/global/cscratch1/sd/tkurth/gb2018/cosmoGAN/small_set/cosmo_primary_256_200k_train.npy'
-test_datafile='/global/cscratch1/sd/tkurth/gb2018/cosmoGAN/small_set/cosmo_primary_256_200k_test.npy'
+train_datafile=$3 #'/global/cscratch1/sd/tkurth/gb2018/cosmoGAN/small_set/cosmo_primary_256_200k_train.npy'
+test_datafile=$4 #'/global/cscratch1/sd/tkurth/gb2018/cosmoGAN/small_set/cosmo_primary_256_200k_test.npy'
 
+#rank grid
 num_row_ranks=$1
 num_col_ranks=$2
 
@@ -11,7 +12,7 @@ output_size=256
 epoch=300
 print_frequency=20
 learning_rate=0.001
-n_up=2
+n_up=5
 flip_labels=0.01
 batch_size=256
 z_dim=64

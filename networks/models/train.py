@@ -67,7 +67,9 @@ def train_otgan(comm_topo, data_tuple, config):
                                    allow_soft_placement=True)
         
         # load test data
-        test_images, _, _ = get_data(config.test_datafile, config.data_format);
+        test_images, _, _ = get_data(config.test_datafile, config.data_format)
+        #preprocess for rescaling to range
+        test_images = (test_images - trn_min) / (trn_max - trn_min)
 
         # prepare plots dir
         plots_dir = os.path.join(config.plots_dir, config.experiment)
@@ -178,7 +180,7 @@ def train_otgan(comm_topo, data_tuple, config):
                                                                                                         })
                     
                     #compute distance matrices using sinkhorn:
-                    lambd = 10.; tolerance=1.e-6; min_iters=10; max_iters=500
+                    lambd = 10.; tolerance=1.e-6; min_iters=10; max_iters=5000
                     
                     if gan.comm_topo.comm_rank == 0:
                         print("Starting Sinkhorn")
@@ -204,7 +206,7 @@ def train_otgan(comm_topo, data_tuple, config):
                         _, g_sum, d_sum = sess.run([update_op, gan.g_summary, gan.d_summary], feed_dict=feed_dict)
                     else:
                         #update generator
-                        _, g_sum = sess.run([g_update_op, gan.d_summary], feed_dict=feed_dict)
+                        _, g_sum = sess.run([g_update_op, gan.g_summary], feed_dict=feed_dict)
                     
                     #increase and get step count
                     gstep = sess.run(gan.global_step)
@@ -223,7 +225,10 @@ def train_otgan(comm_topo, data_tuple, config):
                     if gstep%config.print_frequency == 0:
                         g_images = generate_samples(sess, gan)
                         if hvd.rank() == 0:
-                            plot_pixel_histograms(g_images, test_images, dump_path=plots_dir, tag="step%d_epoch%d" % (gstep, epoch))
+                            print("Starting computing pixel statistics")
+                            pixel_histogram_deviation(g_images, test_images, dump_path=plots_dir, tag="step%d_epoch%d" % (gstep, epoch))
+                            #plot_pixel_histograms(g_images, test_images, dump_path=plots_dir, tag="step%d_epoch%d" % (gstep, epoch))
+                            print("Done computing pixel statistics")
                             #dump_samples(g_images, dump_path="%s/step%d_epoch%d" % (plots_dir, gstep, gstep/num_steps_per_rank_per_epoch), tag="synthetic")
                     
                     #update batch counter

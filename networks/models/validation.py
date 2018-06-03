@@ -4,7 +4,7 @@ import tensorflow as tf
 import horovod.tensorflow as hvd
 
 import matplotlib
-matplotlib.use('Agg')
+matplotlib.use('agg')
 import matplotlib.pyplot as plt
 
 import os
@@ -27,9 +27,36 @@ def compute_evaluation_stats(fake, test):
   return {"KS":pval}
 
 
+def pixel_histogram_deviation(fake, test, dump_path="./", tag=""):
+  #get min and max
+  minimum = np.min([test.min(), fake.min()])*0.98
+  maximum = np.max([test.max(), fake.max()])*1.02
+  
+  #get binning
+  test_bins, test_hist, test_err = get_hist_bins(test, bins=None, range=(minimum, maximum), get_error=True)
+  fake_bins, fake_hist, fake_err = get_hist_bins(fake, bins=None, range=(minimum, maximum), get_error=True)
+  
+  #compute deviation
+  residuals = 0.5 * (test_hist - fake_hist) / (test_hist + fake_hist + 0.0001)
+  
+  #write to file
+  array_dir = os.path.join(dump_path, tag)
+  if not os.path.exists(array_dir):
+    try:
+      os.makedirs(array_dir)
+    except:
+      print("Rank {}: path {} does already exist.".format(hvd.rank(),os.path.join(dump_path,tag)))
+  
+  np.savez('%s/pixel_intensity.npz'%array_dir, test_bins=test_bins, test_hist=test_hist, fake_bins=fake_bins, fake_hist=fake_hist)
+  
+
+
 def plot_pixel_histograms(fake, test, dump_path="./", tag=""):
+  #get binning
   test_bins, test_hist, test_err = get_hist_bins(test, get_error=True)
   fake_bins, fake_hist, fake_err = get_hist_bins(fake, get_error=True)
+  
+  #KS test
   ks_test = stats.ks_2samp(test_hist, fake_hist)[1]
 
   fig, ax = plt.subplots(figsize=(7,6))
@@ -67,10 +94,11 @@ def plot_pixel_histograms(fake, test, dump_path="./", tag=""):
       os.makedirs(plots_dir)
     except:
       print("Rank {}: path {} does already exist.".format(hvd.rank(),os.path.join(dump_path,tag)))
-
-  #plt.savefig('%s/pixel_intensity.jpg'%plots_dir,bbox_inches='tight', format='jpg')
+      
+  #plt.savefig('%s/pixel_intensity.png'%plots_dir,bbox_inches='tight', format='png')
   plt.savefig('%s/pixel_intensity.pdf'%plots_dir,bbox_inches='tight', format='pdf')
   plt.close('all')
+
 
 def dump_samples(images, dump_path="./", tag=""):
 

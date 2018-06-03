@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH -q regular
-#SBATCH -N 144
+#SBATCH -N 16
 #SBATCH -A dasrepo
 #SBATCH -C knl
 #SBATCH -t 4:00:00
@@ -27,6 +27,9 @@ export PYTHONPATH=$(pwd)/../networks  #:${modulebase}/lib/python2.7/site-package
 
 #run training
 rank_grid=$(echo ${SLURM_NNODES} | awk '{print sqrt($1)}')
+train_file="/global/cscratch1/sd/tkurth/gb2018/cosmoGAN/small_set/cosmo_primary_256_200k_train.npy"
+test_file="/global/cscratch1/sd/tkurth/gb2018/cosmoGAN/small_set/cosmo_primary_256_200k_test.npy"
+
 rm -f output/otgan.${SLURM_JOBID}.out
-srun -N ${SLURM_NNODES} -n ${SLURM_NNODES} -c 272 -u ./run_ot_gan.sh ${rank_grid} ${rank_grid} |& tee -a output/otgan.${SLURM_JOBID}.out
+srun -N ${SLURM_NNODES} -n ${SLURM_NNODES} -c 272 -u ./run_ot_gan.sh ${rank_grid} ${rank_grid} ${train_file} ${test_file} |& tee -a output/otgan.${SLURM_JOBID}.out
 #srun -N 1 -n 1 -c 272 -u python ../networks/run_cramer_dcgan.py
