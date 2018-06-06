@@ -29,15 +29,15 @@ def compute_evaluation_stats(fake, test):
 
 def pixel_histogram_deviation(fake, test, dump_path="./", tag=""):
   #get min and max
-  minimum = np.min([test.min(), fake.min()])*0.98
-  maximum = np.max([test.max(), fake.max()])*1.02
+  minimum = -1.1 #np.min([test.min(), fake.min()])*0.98
+  maximum = 1.1 #np.max([test.max(), fake.max()])*1.02
   
   #get binning
   test_bins, test_hist, test_err = get_hist_bins(test, bins=None, range=(minimum, maximum), get_error=True)
   fake_bins, fake_hist, fake_err = get_hist_bins(fake, bins=None, range=(minimum, maximum), get_error=True)
   
   #compute deviation
-  residuals = 0.5 * (test_hist - fake_hist) / (test_hist + fake_hist + 0.0001)
+  residuals = 2. * (test_hist - fake_hist) / (test_hist + fake_hist + 0.0001)
   
   #write to file
   array_dir = os.path.join(dump_path, tag)

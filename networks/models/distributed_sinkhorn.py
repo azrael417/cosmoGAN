@@ -5,7 +5,7 @@ import numpy as np
 import argparse
 
 #what datatype shall we use?
-dtype = np.float32
+dtype = np.float64
 mpidtype = MPI.FLOAT if dtype==np.float32 else MPI.DOUBLE
 
 
@@ -42,14 +42,41 @@ def compute_distance(batch_x, batch_y):
     #denominator is the dyadic product of the two norm vectors
     denominator = np.matmul(denominator_x, denominator_y)
     #return result
-    result = 1.-numerator/denominator
+    result = 1. - numerator / denominator
     #clip the matrix just in case
-    return np.clip(result, a_min=0., a_max=1.)
+    return result #np.clip(result, a_min=0., a_max=1.)
 
 
 #wrapper for loss reduction to keep mpi4py stuff in this file
 def reduce_loss(comm_topo, loss):
     return comm_topo.comm.allreduce(loss, op=MPI.SUM) / np.float(comm_topo.comm_size)
+
+
+#wrapper for custom reduction
+def allreduce(comm_topo, tensor, direction=None):
+    if direction=="row":
+        return comm_topo.comm_row.allreduce(tensor, op=MPI.SUM)
+    elif direction=="col":
+        return comm_topo.comm_col.allreduce(tensor, op=MPI.SUM)
+    else:
+        return comm_topo.comm.allreduce(tensor, op=MPI.SUM)
+
+#gather
+def allgather(comm_topo, tensor, direction=None, axis=0):
+    result = None
+    if direction=="row":
+      shape = list(tensor.shape)
+      shape[axis] = comm_topo.comm_row_size*shape[axis]
+      result = np.zeros(shape, dtype=tensor.dtype)
+      comm_topo.comm_row.Allgather(tensor,result)
+    elif direction=="col":
+      shape = list(tensor.shape)
+      shape[axis] = comm_topo.comm_col_size*shape[axis]
+      result = np.zeros(shape, dtype=tensor.dtype)
+      comm_topo.comm_col.Allgather(tensor,result)
+    else:
+      raise ValueError("Direction {s} not supported".fomat(s=direction))
+    return result
 
 
 #multiplies local matrix with local diagonal matrix where only the diagonal is stored
@@ -177,6 +204,9 @@ def distributed_sinkhorn(comm_topo, loc_amat, lambd, tolerance, min_iters, max_i
             
         #print("(%i %i) Sinkhorn norm difference after %i iterations: %f"%(comm_topo.comm_row_rank, comm_topo.comm_col_rank, iters, normdiff))
     
+    if (iters==max_iters) and (comm_topo.comm_rank==0):
+      print("Warning, maximum number of iterations used in Sinkhorn: {iter}".format(iter=iters))
+    
     #squeeze the additional dimension out of the vector
     loc_vvec = np.squeeze(loc_vvec, axis=1)
     loc_uvec = np.squeeze(loc_uvec, axis=1)
@@ -215,6 +245,9 @@ def distributed_sinkhorn(comm_topo, loc_amat, lambd, tolerance, min_iters, max_i
     #if comm_topo.comm_rank==0:
     #    print(kmat, np.sum(kmat,axis=0),np.sum(kmat,axis=1))
     ##DEBUG
+
+    if dtype == np.float64:
+        loc_kmat = loc_kmat.astype(np.float32)
     
     return loc_kmat
 

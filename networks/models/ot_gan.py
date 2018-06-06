@@ -86,14 +86,14 @@ class ot_gan(object):
         w_xr_xgp = ot_distance(self.c_hxr_hxgp, self.map_hxr_hxgp)
         w_xrp_xg = ot_distance(self.c_hxrp_hxg, self.map_hxrp_hxg)
         w_xrp_xgp = ot_distance(self.c_hxrp_hxgp, self.map_hxrp_hxgp)
-        w_xr_xrp = ot_distance(self.c_hxrp_hxgp, self.map_hxr_hxrp)
+        w_xr_xrp = ot_distance(self.c_hxr_hxrp, self.map_hxr_hxrp)
         w_xg_xgp = ot_distance(self.c_hxg_hxgp, self.map_hxg_hxgp)
         
         #defining loss
         with tf.name_scope("loss"):
             self.ot_loss = w_xr_xg + w_xr_xgp + w_xrp_xg + w_xrp_xgp - 2.* ( w_xr_xrp + w_xg_xgp )
             #critic gets different sign
-            self.d_loss = -self.ot_loss
+            self.d_loss = - self.ot_loss
             #generator gets normal sign
             self.g_loss = self.ot_loss
 

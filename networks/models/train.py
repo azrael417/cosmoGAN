@@ -9,7 +9,7 @@ from models.cramer_dcgan import cramer_dcgan
 from models.ot_gan import ot_gan
 from models.utils import save_checkpoint, load_checkpoint
 from tensorflow.python import debug as tf_debug
-from models.distributed_sinkhorn import distributed_sinkhorn, reduce_loss
+from models.distributed_sinkhorn import distributed_sinkhorn, reduce_loss, allreduce, allgather
 from utils import get_data
 from validation import *
 
@@ -69,7 +69,7 @@ def train_otgan(comm_topo, data_tuple, config):
         # load test data
         test_images, _, _ = get_data(config.test_datafile, config.data_format)
         #preprocess for rescaling to range
-        test_images = (test_images - trn_min) / (trn_max - trn_min)
+        test_images = 2. * (test_images - trn_min) / (trn_max - trn_min) - 1.
 
         # prepare plots dir
         plots_dir = os.path.join(config.plots_dir, config.experiment)
@@ -159,12 +159,37 @@ def train_otgan(comm_topo, data_tuple, config):
                     cend = local_col_end+((idx+1)*gan.global_batch_size)
                     
                     #now grab the node-local fraction of the new batch
-                    xr = (trn_data[perm[rstart:rend],:] - trn_min) / (trn_max - trn_min)
-                    xrp = (trn_data[perm[cstart:cend],:] - trn_min) / (trn_max - trn_min)
+                    xr = 2. * (trn_data[perm[rstart:rend],:] - trn_min) / (trn_max - trn_min) - 1.
+                    xrp = 2. * (trn_data[perm[cstart:cend],:] - trn_min) / (trn_max - trn_min) - 1.
                     #do the same with random vectors:
                     z = gan.generate_prior()[local_row_start:local_row_end,:]
                     zp = gan.generate_prior()[local_col_start:local_col_end,:]
                     
+                    
+                    ##DEBUG
+                    #print("Rank {rnk}: rows=({rlow},{rhigh}), cols=({clow},{chigh})".format(rnk=hvd.rank(), rlow=rstart, rhigh=rend, clow=cstart, chigh=cend))
+                    ##do xr
+                    #xr_exact = 2. * (trn_data[perm[idx*gan.global_batch_size:(idx+1)*gan.global_batch_size],:] - trn_min) / (trn_max - trn_min) - 1.
+                    #xr_gather = allgather(gan.comm_topo, xr, "col")
+                    #print("Rank {rnk}: |xr_e| = {nrm}, |xr_e-xr_g| = {nrmdiff}".format(rnk=hvd.rank(), nrm=np.sum(np.abs(xr_exact)), nrmdiff=np.sum(np.abs(xr_exact-xr_gather))))
+                    ##do xrp
+                    #xrp_exact = 2. * (trn_data[perm[(idx+1)*gan.global_batch_size:(idx+2)*gan.global_batch_size],:] - trn_min) / (trn_max - trn_min) - 1.
+                    #xrp_gather = allgather(gan.comm_topo, xrp, "row")
+                    #print("Rank {rnk}: |xrp_e| = {nrm}, |xrp_e-xrp_g| = {nrmdiff}".format(rnk=hvd.rank(), nrm=np.sum(np.abs(xrp_exact)), nrmdiff=np.sum(np.abs(xrp_exact-xrp_gather))))
+                    ##artificial samples
+                    ##do z
+                    #z_exact = gan.generate_prior()
+                    #z = z_exact[local_row_start:local_row_end,:]
+                    #z_gather = allgather(gan.comm_topo, z, "col")
+                    #print("Rank {rnk}: |z_e| = {nrm}, |z_e-z_g| = {nrmdiff}".format(rnk=hvd.rank(), nrm=np.sum(np.abs(z_exact)), nrmdiff=np.sum(np.abs(z_exact-z_gather))))
+                    ##do zp
+                    #zp_exact = gan.generate_prior()
+                    #zp = zp_exact[local_col_start:local_col_end,:]
+                    #zp_gather = allgather(gan.comm_topo, zp, "row")
+                    #print("Rank {rnk}: |zp_e| = {nrm}, |zp_e-zp_g| = {nrmdiff}".format(rnk=hvd.rank(), nrm=np.sum(np.abs(zp_exact)), nrmdiff=np.sum(np.abs(zp_exact-zp_gather))))
+                    ##DEBUG
+
+
                     #generate the distance matrices:
                     c_hxr_hxg, c_hxr_hxgp, c_hxrp_hxg, c_hxrp_hxgp, c_hxr_hxrp, c_hxg_hxgp = sess.run([gan.c_hxr_hxg, 
                                                                                                         gan.c_hxr_hxgp, 
@@ -180,7 +205,7 @@ def train_otgan(comm_topo, data_tuple, config):
                                                                                                         })
                     
                     #compute distance matrices using sinkhorn:
-                    lambd = 10.; tolerance=1.e-6; min_iters=10; max_iters=5000
+                    lambd = 30.; tolerance=1.e-6; min_iters=20; max_iters=5000
                     
                     if gan.comm_topo.comm_rank == 0:
                         print("Starting Sinkhorn")
