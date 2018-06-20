@@ -51,7 +51,9 @@ def train_otgan(comm_topo, data_tuple, config):
                            d_out_dim=config.d_out_dim,
                            gradient_lambda=config.gradient_lambda,
                            data_format=config.data_format,
-                           transpose_b=config.transpose_matmul_b)
+                           gen_prior=config.prior_dist,
+                           transpose_b=config.transpose_matmul_b,
+                           solver=config.solver)
 
         gan.training_graph()
         d_update_op, g_update_op = gan.optimizer(config.learning_rate, config.beta1, clip_param=0.01)
@@ -70,6 +72,11 @@ def train_otgan(comm_topo, data_tuple, config):
         test_images, _, _ = get_data(config.test_datafile, config.data_format)
         #preprocess for rescaling to range
         test_images = 2. * (test_images - trn_min) / (trn_max - trn_min) - 1.
+        #chunk the test set into batches
+        num_test_batches = test_images.shape[0] // gan.batch_size
+        test_images = test_images[:num_test_batches*gan.batch_size]
+        if comm_rank == 0:
+            print("Using {n} test batches.".format(n=num_test_batches))
 
         # prepare plots dir
         plots_dir = os.path.join(config.plots_dir, config.experiment)
@@ -205,16 +212,16 @@ def train_otgan(comm_topo, data_tuple, config):
                                                                                                         })
                     
                     #compute distance matrices using sinkhorn:
-                    lambd = 30.; tolerance=1.e-6; min_iters=20; max_iters=5000
+                    slambda = config.sinkhorn_lambda; tolerance=1.e-6; min_iters=20; max_iters=5000
                     
                     if gan.comm_topo.comm_rank == 0:
                         print("Starting Sinkhorn")
-                    map_hxr_hxg = distributed_sinkhorn(gan.comm_topo, c_hxr_hxg, lambd, tolerance, min_iters, max_iters, verbose=False)
-                    map_hxr_hxgp = distributed_sinkhorn(gan.comm_topo, c_hxr_hxgp, lambd, tolerance, min_iters, max_iters, verbose=False)
-                    map_hxrp_hxg = distributed_sinkhorn(gan.comm_topo, c_hxrp_hxg, lambd, tolerance, min_iters, max_iters, verbose=False)
-                    map_hxrp_hxgp = distributed_sinkhorn(gan.comm_topo, c_hxrp_hxgp, lambd, tolerance, min_iters, max_iters, verbose=False)
-                    map_hxr_hxrp = distributed_sinkhorn(gan.comm_topo, c_hxr_hxrp, lambd, tolerance, min_iters, max_iters, verbose=False)
-                    map_hxg_hxgp = distributed_sinkhorn(gan.comm_topo, c_hxg_hxgp, lambd, tolerance, min_iters, max_iters, verbose=False)
+                    map_hxr_hxg = distributed_sinkhorn(gan.comm_topo, c_hxr_hxg, slambda, tolerance, min_iters, max_iters, verbose=False)
+                    map_hxr_hxgp = distributed_sinkhorn(gan.comm_topo, c_hxr_hxgp, slambda, tolerance, min_iters, max_iters, verbose=False)
+                    map_hxrp_hxg = distributed_sinkhorn(gan.comm_topo, c_hxrp_hxg, slambda, tolerance, min_iters, max_iters, verbose=False)
+                    map_hxrp_hxgp = distributed_sinkhorn(gan.comm_topo, c_hxrp_hxgp, slambda, tolerance, min_iters, max_iters, verbose=False)
+                    map_hxr_hxrp = distributed_sinkhorn(gan.comm_topo, c_hxr_hxrp, slambda, tolerance, min_iters, max_iters, verbose=False)
+                    map_hxg_hxgp = distributed_sinkhorn(gan.comm_topo, c_hxg_hxgp, slambda, tolerance, min_iters, max_iters, verbose=False)
                     if gan.comm_topo.comm_rank == 0:
                         print("Ending Sinkhorn")
                     
@@ -227,10 +234,12 @@ def train_otgan(comm_topo, data_tuple, config):
                                 gan.map_hxg_hxgp: map_hxg_hxgp}
                     
                     if gstep%config.n_up==0:
-                        #do combined update
-                        _, g_sum, d_sum = sess.run([update_op, gan.g_summary, gan.d_summary], feed_dict=feed_dict)
-                    else:
                         #update generator
+                        _, g_sum = sess.run([g_update_op, gan.g_summary], feed_dict=feed_dict)
+                        #update critic
+                        _, d_sum = sess.run([d_update_op, gan.d_summary], feed_dict=feed_dict)
+                    else:
+                        #update generator only
                         _, g_sum = sess.run([g_update_op, gan.g_summary], feed_dict=feed_dict)
                     
                     #increase and get step count
@@ -248,7 +257,7 @@ def train_otgan(comm_topo, data_tuple, config):
                     
                     # increment epoch counter
                     if gstep%config.print_frequency == 0:
-                        g_images = generate_samples(sess, gan)
+                        g_images = generate_samples(sess, gan, num_test_batches)
                         if hvd.rank() == 0:
                             print("Starting computing pixel statistics")
                             pixel_histogram_deviation(g_images, test_images, dump_path=plots_dir, tag="step%d_epoch%d" % (gstep, epoch))

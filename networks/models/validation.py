@@ -48,6 +48,14 @@ def pixel_histogram_deviation(fake, test, dump_path="./", tag=""):
       print("Rank {}: path {} does already exist.".format(hvd.rank(),os.path.join(dump_path,tag)))
   
   np.savez('%s/pixel_intensity.npz'%array_dir, test_bins=test_bins, test_hist=test_hist, fake_bins=fake_bins, fake_hist=fake_hist)
+
+  #now save the images themselves
+  #get 9 random ones
+  selection = np.random.randint(0, fake.shape[0], 9)
+  savedict = {}
+  for idx,s in enumerate(selection):
+      savedict["image_"+str(idx)] = fake[s]
+  np.savez('%s/fake_images.npz'%array_dir, **savedict)
   
 
 

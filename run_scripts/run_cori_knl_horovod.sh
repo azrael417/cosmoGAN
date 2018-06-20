@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH -q regular
-#SBATCH -N 16
+#SBATCH -N 1
 #SBATCH -A dasrepo
 #SBATCH -C knl
 #SBATCH -t 4:00:00

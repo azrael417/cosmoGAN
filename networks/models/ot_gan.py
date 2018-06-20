@@ -10,7 +10,7 @@ class ot_gan(object):
                  nd_layers=4, ng_layers=4, df_dim=128, gf_dim=128, 
                  c_dim=1, z_dim=100, d_out_dim=256, gradient_lambda=10., 
                  data_format="NHWC",
-                 gen_prior="normal", transpose_b=False):
+                 gen_prior="normal", solver="ADAM", transpose_b=False, spectral_weight_normalization=True):
 
         self.comm_topo = comm_topo
         self.output_size = output_size
@@ -29,6 +29,8 @@ class ot_gan(object):
         self.rng = np.random.RandomState(1234567)
         self.transpose_b = transpose_b # transpose weight matrix in linear layers for (possible) better performance when running on HSW/KNL
         self.stride = 2 # this is fixed for this architecture
+        self.solver = solver
+        self.spectral_weight_normalization = spectral_weight_normalization
 
         self._check_architecture_consistency()
         
@@ -92,9 +94,9 @@ class ot_gan(object):
         #defining loss
         with tf.name_scope("loss"):
             self.ot_loss = w_xr_xg + w_xr_xgp + w_xrp_xg + w_xrp_xgp - 2.* ( w_xr_xrp + w_xg_xgp )
-            #critic gets different sign
+            #critic gets - sign
             self.d_loss = - self.ot_loss
-            #generator gets normal sign
+            #generator gets + sign
             self.g_loss = self.ot_loss
 
         self.d_summary = tf.summary.merge([tf.summary.histogram("loss/L_critic", self.d_loss)])
@@ -106,8 +108,14 @@ class ot_gan(object):
         self.g_summary = tf.summary.merge(g_sum)
 
         t_vars = tf.trainable_variables()
+        
+        #create variables
         self.d_vars = [var for var in t_vars if 'discriminator/' in var.name]
         self.g_vars = [var for var in t_vars if 'generator/' in var.name]
+        
+        #create dictionary for holding the normalizations
+        self.d_vars_norm = { var.name: 1. for var in self.d_vars}
+        self.g_vars_norm = { var.name: 1. for var in self.g_vars}
 
         with tf.variable_scope("counters") as counters_scope:
             self.epoch = tf.Variable(-1, name='epoch', trainable=False)
@@ -144,18 +152,87 @@ class ot_gan(object):
 
     def optimizer(self, learning_rate, beta1, clip_param):
         #critic
-        d_optim = tf.train.AdamOptimizer(learning_rate, beta1=beta1)
+        d_optim = None
+        if self.solver == "ADAM":
+            d_optim = tf.train.AdamOptimizer(learning_rate, beta1=beta1)
+        elif self.solver == "RMSProp":
+            d_optim = tf.train.RMSPropOptimizer(learning_rate)
+        else:
+            raise ValueError("Solver type {solver} not supported.".format(solver=self.solver))
         d_optim = hvd.DistributedOptimizer(d_optim)
-        d_op = d_optim.minimize(self.d_loss, var_list=self.d_vars)
+        #d_op = d_optim.minimize(self.d_loss, var_list=self.d_vars)
+        
+        #normalize weights
+        if self.spectral_weight_normalization:
+          assign_op = self.normalize_weights(self.d_vars_norm, self.d_vars)
+          #compute gradients
+          with tf.control_dependencies(assign_op):
+            #compute the gradients with respect to the normalized variables
+            d_grads_and_vars = d_optim.compute_gradients(self.d_loss, var_list=self.d_vars)
+            #create assign op for the weights
+            assign_op = [vn.assign(vn*self.d_vars_norm[vn.name]) for (_, vn) in d_grads_and_vars]
+        else:
+          d_grads_and_vars = d_optim.compute_gradients(self.d_loss, var_list=self.d_vars)
+          assign_op = []
+        
+        #make sure that grads and wars have been computed
+        with tf.control_dependencies(assign_op):
+          d_op = d_optim.apply_gradients(d_grads_and_vars)
+        
 
         #generator
-        g_optim = tf.train.AdamOptimizer(learning_rate, beta1=beta1)
+        g_optim = None
+        if self.solver == "ADAM":
+            g_optim = tf.train.AdamOptimizer(learning_rate, beta1=beta1)
+        elif self.solver == "RMSProp":
+            g_optim = tf.train.RMSPropOptimizer(learning_rate)
+        else:
+            raise ValueError("Solver type {solver} not supported.".format(solver=self.solver))
         g_optim = hvd.DistributedOptimizer(g_optim)
-        g_op = g_optim.minimize(self.g_loss, global_step=self.global_step, var_list=self.g_vars)
+        #g_op = g_optim.minimize(self.g_loss, global_step=self.global_step, var_list=self.g_vars)
+
+        #normalize weights
+        if self.spectral_weight_normalization:
+          assign_op = self.normalize_weights(self.g_vars_norm, self.g_vars)
+          #compute gradients
+          with tf.control_dependencies(assign_op):
+            #compute the gradients with respect to the normalized variables
+            g_grads_and_vars = g_optim.compute_gradients(self.g_loss, var_list=self.g_vars)
+            #create assign op for the weights
+            assign_op = [vn.assign(vn*self.g_vars_norm[vn.name]) for (_, vn) in g_grads_and_vars]
+        else:
+          g_grads_and_vars = g_optim.compute_gradients(self.g_loss, var_list=self.g_vars)
+          assign_op = []
+        
+        #make sure that grads and wars have been computed
+        with tf.control_dependencies(assign_op):
+          g_op = g_optim.apply_gradients(g_grads_and_vars, global_step=self.global_step)
 
         return d_op, g_op
 
+
+    def normalize_weights(self, weight_normalization, weightlist):
+      #normalize the weights
+      assign_op = []
+      for idx,w in enumerate(weightlist):
+        if w is not None:
+          sval = tf.cond(pred = tf.greater(tf.rank(w), 1), 
+                          true_fn = lambda: self.get_largest_sv(w),
+                          false_fn = lambda: 1.)
+          weight_normalization[w.name] = sval
+          assign_op.append(weightlist[idx].assign(w/sval))
+      return assign_op
     
+    
+    def get_largest_sv(self, weight):
+      shape = weight.get_shape().as_list()
+      newshape = (shape[0], int(np.prod(shape[1:])))
+      wtilde = tf.reshape(weight, newshape)
+      #avoid backpropping through the SVD
+      sval = tf.svd(wtilde, compute_uv=False)[0]
+      return sval
+
+
     #generator helper function
     def generator(self, z, is_training):
 
@@ -205,7 +282,11 @@ class ot_gan(object):
             # h1 = linear(reshape(h0))
             hn = linear(tf.reshape(chain, [self.batch_size, -1]), self.d_out_dim, 'h%i_lin'%self.nd_layers, transpose_b=self.transpose_b)
             
+            #l2 normalization: important for rescaling between -1,1
+            hn = tf.nn.l2_normalize(hn, axis=1, epsilon=1e-12, name="l2-output-normalization")
+            
             return hn
+
 
     def generate_prior(self, shape=None):
         if self.gen_prior == "normal":
@@ -213,6 +294,11 @@ class ot_gan(object):
                 return self.rng.normal(size=(self.global_batch_size, self.z_dim)).astype(np.float32)
             else:
                 return self.rng.normal(size=shape).astype(np.float32)
+        elif self.gen_prior == "uniform":
+            if not shape:
+                return self.rng.uniform(low=-1., high=1., size=(self.global_batch_size, self.z_dim)).astype(np.float32)
+            else:
+                return self.rng.uniform(low=-1., high=1., size=shape).astype(np.float32)
         else:
             raise ValueError("Error, only normal distributed random numbers are supported at the moment.")
 
