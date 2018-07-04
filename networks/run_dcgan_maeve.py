@@ -2,8 +2,8 @@ import os
 import subprocess
 import shlex
 
-datapath = '/data1/adalbert/Maps10/tfrecords/512/'
-output_size = 512
+datapath = '/data1/adalbert/Maps10/256/train/'
+output_size = 256
 c_dim = 1
 epoch = 100
 batch_size = 16
@@ -13,8 +13,8 @@ ng_layers = 4
 gf_dim = 128
 df_dim = 16
 save_every_step = 'False'
-# data_format = 'NCHW'
-data_format = 'NHWC'
+data_format = 'NCHW'
+# data_format = 'NHWC'
 transpose_matmul_b = False
 use_larc = True
 verbose = 'True'
