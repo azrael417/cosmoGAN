@@ -99,6 +99,20 @@ class dcgan(object):
             self.global_step = tf.Variable(0, name='global_step', trainable=False)
 
         self.saver = tf.train.Saver(max_to_keep=8000)
+        
+    def inference_graph_V2(self):
+
+        #if self.data_format == "NHWC":
+        #  self.images = tf.placeholder(tf.float32, [self.batch_size, self.output_size, self.output_size, self.c_dim], name='real_images')
+        #else:
+        #  self.images = tf.placeholder(tf.float32, [self.batch_size, self.c_dim, self.output_size, self.output_size], name='real_images')
+
+        self.z = tf.placeholder(tf.float32, [None,  self.z_dim], name='z')
+
+        with tf.variable_scope("generator") as g_scope:
+          self.G = self.generator(self.z, is_training=False)
+        
+        self.saver = tf.train.Saver(max_to_keep=8000)
 
     def optimizer(self, learning_rate, beta1):
 
